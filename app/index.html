@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="theme-color" content="#ffffff" />
     <meta name="description" content="Connect your luggage tag. Scan to lock or release." />
     <title>Carry · Luggage tag</title>
@@ -40,6 +40,8 @@
           </div>
           <p id="setup-line" class="setup-line" hidden>Ready to lock · <span id="setup-time"></span></p>
           <button id="cancel-lock" class="text-button" hidden>Cancel</button>
+          <button id="cancel-reconnect" class="text-button find-button" hidden>Stop reconnecting</button>
+          <button id="find" class="text-button find-button" hidden>Find tag</button>
           <div id="notice" class="notice" role="status" aria-live="polite" hidden></div>
         </section>
       </main>
@@ -53,15 +55,29 @@
     </dialog>
     <dialog id="tag-options" aria-labelledby="options-title">
       <div class="dialog-heading"><h2 id="options-title">Tag options</h2><form method="dialog"><button class="text-button">Done</button></form></div>
-      <div class="option-list"><button id="flash" disabled>Find tag <span>Flash the light</span></button><button id="storage" disabled>Close for storage</button><button id="disconnect" hidden>Disconnect</button></div>
+      <div class="option-list"><button id="find-in-options" disabled>Find tag <span>Follow the signal</span></button><button id="flash" disabled>Flash light</button><button id="storage" disabled>Close for storage</button><button id="disconnect" hidden>Disconnect</button><button id="forget-tag" hidden>Forget saved tag</button></div>
       <details id="manual-entry"><summary>Enter a demo token</summary><form id="manual-form"><label for="token">16-character token</label><input id="token" name="token" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="16" placeholder="A1B2C3D4E5F60718" pattern="[a-fA-F0-9]{16}" required/><div class="manual-actions"><button id="manual-lock" class="primary" type="submit" name="action" value="L" disabled>Lock</button><button id="manual-unlock" class="primary" type="submit" name="action" value="U" disabled>Release</button></div></form></details>
       <div id="demo-tools" class="demo-tools" hidden><h3>Simulated tag</h3><button id="quick-setup">Press for setup</button><button id="quick-service">Hold to open · 3 seconds</button></div>
       <a class="support-link" href="./demo-passes.html" target="_blank" rel="noopener">View demo passes ↗</a>
+    </dialog>
+    <dialog id="finder" aria-labelledby="finder-title">
+      <div class="dialog-heading"><h2 id="finder-title">Find your tag</h2><form method="dialog"><button class="text-button">Done</button></form></div>
+      <p id="finder-device" class="finder-device"></p>
+      <div id="signal-bars" class="signal-bars" role="img" aria-label="Waiting for signal" data-bars="0"><i></i><i></i><i></i><i></i></div>
+      <h3 id="signal-label" class="signal-label" aria-live="polite">Checking signal…</h3>
+      <p id="signal-trend" class="signal-trend" aria-live="polite">Hold the phone steady for a few seconds.</p>
+      <p id="signal-reading" class="signal-reading"></p>
+      <p class="finder-hint">Walk slowly and follow a stronger signal. Walls and your body can affect it. No direction or exact distance.</p>
+      <button id="finder-flash" class="primary">Flash light</button>
+      <button id="finder-reconnect" class="primary" hidden>Reconnect</button>
+      <button id="finder-stop" class="text-button find-button" hidden>Stop reconnecting</button>
+      <p id="finder-message" class="scan-message" role="status"></p>
     </dialog>
     <dialog id="help-dialog" aria-labelledby="help-title">
       <div class="dialog-heading"><h2 id="help-title">Using your tag</h2><form method="dialog"><button class="text-button">Done</button></form></div>
       <section class="help-section"><h3>Lock</h3><p>Insert the cable and scan your demo pass. Hold the tag button for ½ second, then release.</p></section>
       <section class="help-section"><h3>Release</h3><p>Scan the same pass. Remove the cable once the tag is open.</p></section>
+      <section class="help-section"><h3>Find</h3><p>Open Find tag and walk slowly. Follow the stronger signal, then flash the light to confirm. Keep this page open and the tag connected.</p></section>
       <section class="help-section"><h3>Stored or stuck?</h3><p>Clear the bolt, then hold the tag button for 3 seconds. If the motor keeps pushing, switch the tag off before clearing it.</p></section>
       <p class="support-note">Real tag: Android Chrome over HTTPS.<br/>This prototype accepts demo QR passes only.</p>
     </dialog>

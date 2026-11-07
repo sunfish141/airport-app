@@ -14,7 +14,7 @@ async function fixture(context) {
   await connection.connect();
   async function move(opcode, token) {
     const result = connection.send(opcode, token);
-    await Promise.resolve();
+    await new Promise(setImmediate);
     context.mock.timers.tick(650);
     return result;
   }
@@ -56,7 +56,7 @@ test('obstruction retains assignment through timeout and requires service recove
   await move('L', DEMO_TOKENS[0]);
   tag.setObstructed(true);
   const unlocking = assert.rejects(connection.send('U', DEMO_TOKENS[0]), /timed out/);
-  await Promise.resolve();
+  await new Promise(setImmediate);
   context.mock.timers.tick(650);
   assert.equal(connection.status.assigned, true);
   assert.equal(connection.status.state, 'MOVING');
@@ -82,7 +82,7 @@ test('reboot preserves ownership and interrupted motion needs recovery; reset cl
   assert.equal(connection.status.state, 'LOCKED_ASSIGNED');
   assert.equal(connection.status.assigned, true);
   const unlocking = assert.rejects(connection.send('U', DEMO_TOKENS[0]), /disconnected/);
-  await Promise.resolve();
+  await new Promise(setImmediate);
   tag.reboot();
   await unlocking;
   await connection.connect();

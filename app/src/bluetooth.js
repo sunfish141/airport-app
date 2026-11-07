@@ -1,44 +1,72 @@
-import { UUIDS, decodeStatus, encodeCommand, isNewer } from './protocol.js';
+import { UUIDS, decodeStatus, decodeSignal, encodeCommand, isNewer } from './protocol.js';
 
 export class TagConnection {
-  constructor({ bluetooth = globalThis.navigator?.bluetooth, onStatus = () => {}, onConnection = () => {} } = {}) {
-    Object.assign(this, { bluetooth, onStatus, onConnection });
+  constructor({ bluetooth = globalThis.navigator?.bluetooth, requireSecureContext = true, onStatus = () => {}, onConnection = () => {} } = {}) {
+    Object.assign(this, { bluetooth, requireSecureContext, onStatus, onConnection });
     this.device = null;
     this.status = null;
     this.pending = null;
     this.connecting = false;
     this.session = 0;
-    this.handleValue = (event) => this.accept(event.target.value);
+    this.gattTail = Promise.resolve();
+    this.handleValue = (event) => { if (event.target === this.statusCharacteristic) this.accept(event.target.value); };
     this.handleDisconnect = () => this.cleanup('Tag disconnected. Reconnect to read its confirmed state.');
   }
 
   get connected() { return Boolean(this.device?.gatt.connected && this.commandCharacteristic); }
 
-  async connect() {
+  async connect(knownDevice = null) {
     if (this.connecting || this.connected) return;
-    if (!globalThis.isSecureContext) throw new Error('Open this app over HTTPS to use Bluetooth.');
+    if (this.requireSecureContext && !globalThis.isSecureContext) throw new Error('Open this app over HTTPS to use Bluetooth.');
     if (!this.bluetooth) throw new Error('Web Bluetooth is unavailable. Use Android Chrome.');
     this.connecting = true;
     const session = ++this.session;
+    let timer;
+    let abort;
     try {
       // requestDevice runs directly within the Connect click gesture, before any await.
-      const device = await this.bluetooth.requestDevice({ filters: [{ services: [UUIDS.service] }] });
+      const device = await (knownDevice || this.bluetooth.requestDevice({ filters: [{ services: [UUIDS.service] }] }));
       if (session !== this.session) throw new Error('Connection cancelled.');
       this.device = device;
+      const cancelled = new Promise((_, reject) => { abort = () => reject(new Error('Connection interrupted.')); });
+      this.abortConnect = abort;
+      // The chooser has no deadline; only the connection handshake is bounded.
+      timer = setTimeout(() => { if (session === this.session) this.cleanup('Connection timed out. Keep the tag nearby.'); }, 10000);
+      const checkSession = () => { if (session !== this.session) throw new Error('Connection interrupted.'); };
+      const step = async (request) => {
+        const value = await Promise.race([request, cancelled]);
+        checkSession();
+        return value;
+      };
       device.addEventListener('gattserverdisconnected', this.handleDisconnect);
-      const server = await device.gatt.connect();
-      const service = await server.getPrimaryService(UUIDS.service);
-      this.commandCharacteristic = await service.getCharacteristic(UUIDS.command);
-      this.statusCharacteristic = await service.getCharacteristic(UUIDS.status);
+      const server = await step(device.gatt.connect());
+      checkSession();
+      const service = await step(server.getPrimaryService(UUIDS.service));
+      checkSession();
+      this.service = service;
+      this.signalCharacteristic = undefined;
+      const commandCharacteristic = await step(service.getCharacteristic(UUIDS.command));
+      checkSession();
+      this.commandCharacteristic = commandCharacteristic;
+      const statusCharacteristic = await step(service.getCharacteristic(UUIDS.status));
+      checkSession();
+      this.statusCharacteristic = statusCharacteristic;
       this.statusCharacteristic.addEventListener('characteristicvaluechanged', this.handleValue);
-      await this.statusCharacteristic.startNotifications();
-      this.accept(await this.statusCharacteristic.readValue());
+      await step(this.statusCharacteristic.startNotifications());
+      checkSession();
+      const status = await step(this.statusCharacteristic.readValue());
+      checkSession();
+      this.accept(status);
       if (!this.connected || session !== this.session) throw new Error('Connection interrupted.');
       this.onConnection(true, device.name || 'Luggage tag');
     } catch (error) {
-      this.disconnect();
+      if (session === this.session) this.disconnect();
       throw error;
-    } finally { this.connecting = false; }
+    } finally {
+      clearTimeout(timer);
+      if (this.abortConnect === abort) this.abortConnect = null;
+      this.connecting = false;
+    }
   }
 
   accept(value) {
@@ -75,10 +103,58 @@ export class TagConnection {
         this.disconnect();
       }, 5000);
       // A GATT write acknowledgement is transport delivery, not movement success.
-      Promise.resolve().then(() => this.commandCharacteristic.writeValueWithResponse(bytes)).catch((error) => {
+      this.performGatt(() => {
+        if (this.pending !== pending) return; // Service recovery may have cancelled a queued request.
+        return this.commandCharacteristic.writeValueWithResponse(bytes);
+      }).catch((error) => {
         if (this.pending === pending) this.settle(error);
       });
     });
+  }
+
+  // Serialize reads and writes: Web Bluetooth can reject overlapping GATT
+  // operations. Proximity reads are skipped whenever an actuator command waits.
+  performGatt(operation, timeoutMs = 0) {
+    const session = this.session;
+    const task = this.gattTail.then(async () => {
+      if (session !== this.session || !this.connected) throw new Error('Tag disconnected.');
+      let timer;
+      try {
+        const result = await (timeoutMs ? Promise.race([
+          Promise.resolve().then(operation),
+          new Promise((_, reject) => { timer = setTimeout(() => {
+            if (session === this.session) this.cleanup('Bluetooth read timed out. Reconnect to continue.');
+            reject(new Error('Bluetooth read timed out.'));
+          }, timeoutMs); }),
+        ]) : operation());
+        if (session !== this.session) throw new Error('Tag disconnected.');
+        return result;
+      } finally { clearTimeout(timer); }
+    });
+    this.gattTail = task.catch(() => {});
+    return task;
+  }
+
+  readSignal() {
+    if (!this.connected) return Promise.reject(new Error('Connect to a tag first.'));
+    if (this.pending) return Promise.resolve(null);
+    const session = this.session;
+    const service = this.service;
+    return this.performGatt(async () => {
+      if (this.pending) return null;
+      if (this.signalCharacteristic === undefined) {
+        let characteristic;
+        try { characteristic = await service.getCharacteristic(UUIDS.signal); }
+        catch (error) {
+          if (error.name !== 'NotFoundError') throw error;
+          characteristic = null;
+        }
+        if (session !== this.session) throw new Error('Tag disconnected.');
+        this.signalCharacteristic = characteristic;
+      }
+      if (!this.signalCharacteristic || typeof this.signalCharacteristic.readValue !== 'function') return { supported: false };
+      return { supported: true, rssi: decodeSignal(await this.signalCharacteristic.readValue()) };
+    }, 2500);
   }
 
   settle(error, status) {
@@ -91,12 +167,17 @@ export class TagConnection {
 
   cleanup(message) {
     ++this.session;
+    this.abortConnect?.();
+    this.abortConnect = null;
     this.settle(new Error(message));
     this.statusCharacteristic?.removeEventListener('characteristicvaluechanged', this.handleValue);
     this.device?.removeEventListener('gattserverdisconnected', this.handleDisconnect);
-    if (this.device?.gatt.connected) this.device.gatt.disconnect();
+    this.device?.gatt.disconnect();
     this.commandCharacteristic = null;
     this.statusCharacteristic = null;
+    this.service = null;
+    this.signalCharacteristic = undefined;
+    this.gattTail = Promise.resolve();
     this.status = null;
     this.device = null;
     this.onConnection(false, message);

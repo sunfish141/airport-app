@@ -50,6 +50,9 @@ function render(s) {
   setText('pause-sim', s.paused ? 'Resume' : 'Pause');
   $('step-sim').disabled = !s.paused;
   if (s.position === undefined) return;
+  if (document.activeElement !== $('signal-level')) $('signal-level').value = String(s.rssi);
+  setText('signal-output', `${s.rssi} dBm`);
+  $('signal-missing').checked = !s.signalAvailable;
   setText('diagram-open-label', `OPEN · GPIO${s.constants.openPin}`);
   setText('diagram-closed-label', `CLOSED · GPIO${s.constants.closedPin}`);
   setText('servo-pin-label', `Servo output · GPIO${s.constants.servoPin}`);
@@ -120,6 +123,8 @@ $('main-power').addEventListener('click', () => send('power', !current?.powered)
 $('reboot-tag').addEventListener('click', () => send('reboot'));
 $('jam').addEventListener('change', (event) => send('obstruction', event.target.checked));
 $('sensor-fault').addEventListener('change', (event) => send('sensors', Number(event.target.value)));
+$('signal-level').addEventListener('input', (event) => send('signal', Number(event.target.value)));
+$('signal-missing').addEventListener('change', (event) => send('signal-available', !event.target.checked));
 $('storage-failure').addEventListener('change', (event) => send('storage-failure', event.target.checked));
 $('corrupt-nvs').addEventListener('click', () => send('corrupt-storage'));
 $('reset-workbench').addEventListener('click', () => { clearedThrough = 0; lastTrace = ''; send('reset'); });

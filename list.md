@@ -8,7 +8,7 @@
 | [LM2596 adjustable step-down modules, 5-pack](https://www.amazon.ca/dp/B07PDGG84B) | Use one for the regulated servo supply |
 | [IZOKEE jumper wires, 240-pack](https://www.amazon.ca/dp/B08151TQHG) | Bench connections |
 
-Also needed: a suitable power source, USB-C data cable, and multimeter. For a working lock, add the cable/bolt/linkage and two mechanically actuated endpoint contacts. An external LED and series resistor are optional for status and **Find tag**.
+Also needed: a suitable power source, USB-C data cable, and multimeter. For a working lock, add the cable/bolt/linkage and two mechanically actuated endpoint contacts. An external LED and series resistor are optional for status and **Flash light**. Bluetooth proximity search uses the board’s existing radio.
 
 The LM2596 steps voltage down; it cannot produce 5 V from a single 18650 cell. NFC hardware is not needed for the single-tag prototype.
 

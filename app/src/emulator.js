@@ -31,6 +31,9 @@ window.addEventListener('message', (event) => {
   $('demo-connect').textContent = snapshot.connected ? 'Disconnect virtual tag' : 'Connect virtual tag';
   $('demo-setup').disabled = snapshot.state !== 'OPEN_FREE';
   $('obstruction').checked = Boolean(snapshot.obstructed);
+  if (document.activeElement !== $('signal-level')) $('signal-level').value = String(snapshot.rssi);
+  $('signal-output').textContent = `${snapshot.rssi} dBm`;
+  $('signal-missing').checked = !snapshot.signalAvailable;
 });
 $('demo-connect').addEventListener('click', () => send(snapshot?.connected ? 'disconnect' : 'connect'));
 $('demo-setup').addEventListener('click', () => send('setup'));
@@ -38,6 +41,8 @@ $('demo-service').addEventListener('click', () => send('service'));
 $('demo-reboot').addEventListener('click', () => send('reboot'));
 $('demo-reset').addEventListener('click', () => send('reset'));
 $('obstruction').addEventListener('change', (event) => send('obstruction', event.target.checked));
+$('signal-level').addEventListener('input', (event) => send('signal', Number(event.target.value)));
+$('signal-missing').addEventListener('change', (event) => send('signal-available', !event.target.checked));
 $('device-size').addEventListener('change', fitPhone);
 $('rotate').addEventListener('click', () => { rotated = !rotated; fitPhone(); });
 frame.addEventListener('load', () => send('status'));

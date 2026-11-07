@@ -34,7 +34,11 @@ try {
     }
     characteristic.startNotifications = async () => characteristic;
     characteristic.readValue = async () => packet();
-    const device = new EventTarget(); device.name = 'Carry-A1B2C3';
+    const device = new EventTarget(); device.name = 'Carry-A1B2C3'; device.id = 'test-tag-A';
+    const signal = { readValue: async () => {
+      ++window.tagTest.signalReads;
+      return new DataView(Uint8Array.of(1, Number(window.tagTest.signalAvailable), window.tagTest.rssi & 255, 0).buffer);
+    } };
     const command = {
       async writeValueWithResponse(bytes) {
         const text = new TextDecoder().decode(bytes); writes.push(text);
@@ -52,12 +56,25 @@ try {
     };
     device.gatt = {
       connected: false,
-      async connect() { this.connected = true; return { getPrimaryService: async () => ({ getCharacteristic: async (uuid) => uuid.startsWith('7db10003') ? characteristic : command }) }; },
+      async connect() { ++window.tagTest.connections; this.connected = true; return { getPrimaryService: async () => ({ getCharacteristic: async (uuid) => {
+        if (uuid.startsWith('7db10003')) return characteristic;
+        if (uuid.startsWith('7db10004')) {
+          if (!window.tagTest.signalSupported) throw new DOMException('Characteristic not found.', 'NotFoundError');
+          return signal;
+        }
+        return command;
+      } }) }; },
       disconnect() { this.connected = false; device.dispatchEvent(new Event('gattserverdisconnected')); },
     };
-    Object.defineProperty(navigator, 'bluetooth', { value: { requestDevice: async () => device } });
+    const bluetooth = { requestDevice: async () => { ++window.tagTest.requests; return device; } };
+    if (!new URLSearchParams(location.search).has('noRestore')) bluetooth.getDevices = async () => {
+      ++window.tagTest.enumerations;
+      return [{ id: 'wrong-device', name: device.name, gatt: { connect: () => { throw new Error('Wrong tag selected'); } } }, device];
+    };
+    Object.defineProperty(navigator, 'bluetooth', { value: bluetooth });
     window.tagTest = {
-      writes, pass: 1, cameraStops: 0,
+      writes, pass: 1, cameraStops: 0, requests: 0, connections: 0, enumerations: 0, signalReads: 0, signalAvailable: true, signalSupported: true, rssi: -55,
+      disconnect: () => device.gatt.disconnect(),
       setup: () => emit({ setupMs: 10000, command: '-', error: 0 }),
       expireSetup: () => emit({ setupMs: 0, command: '-', error: 0 }),
       service: () => { assignedToken = ''; emit({ state: 0, flags: 2, error: 0, command: 'S' }); },
@@ -131,17 +148,87 @@ try {
   await options();
   await page.locator('#flash').click();
   await page.locator('#notice').getByText('Tag is flashing.', { exact: true }).waitFor();
+  await page.locator('#find').click();
+  const signalLabel = (text) => page.locator('#signal-label').getByText(text, { exact: true }).waitFor();
+  await signalLabel('Strong signal');
+  assert.equal(await page.locator('#signal-bars').getAttribute('data-bars'), '4');
+  await page.evaluate(() => { window.tagTest.rssi = -95; });
+  await page.locator('#signal-trend').getByText('Getting weaker', { exact: true }).waitFor();
+  await signalLabel('Very weak signal');
+  await page.evaluate(() => { window.tagTest.rssi = -40; });
+  await page.locator('#signal-trend').getByText('Getting stronger', { exact: true }).waitFor();
+  await signalLabel('Strong signal');
+  await page.screenshot({ path: join(artifacts, 'finder.png'), fullPage: true });
+  await page.evaluate(() => {
+    Object.defineProperty(document, 'hidden', { value: true, configurable: true });
+    document.dispatchEvent(new Event('visibilitychange'));
+  });
+  await signalLabel('Search paused');
+  assert.equal(await page.locator('#signal-bars').getAttribute('data-bars'), '0');
+  const pausedReads = await page.evaluate(() => window.tagTest.signalReads);
+  await page.waitForTimeout(1200);
+  assert.equal(await page.evaluate(() => window.tagTest.signalReads), pausedReads);
+  await page.evaluate(() => { delete document.hidden; document.dispatchEvent(new Event('visibilitychange')); });
+  await signalLabel('Checking signal…');
+  await signalLabel('Strong signal');
+  await page.locator('#finder-flash').click();
+  await page.locator('#finder-message').getByText('Tag is flashing.', { exact: true }).waitFor();
+  await page.evaluate(() => { window.tagTest.signalAvailable = false; });
+  await signalLabel('Signal unavailable');
+  assert.equal(await page.locator('#signal-bars').getAttribute('data-bars'), '0');
+  const beforeReconnect = await page.evaluate(() => [...window.tagTest.writes]);
+  await page.evaluate(() => window.tagTest.disconnect());
+  await signalLabel('Reconnecting…');
+  await state('Bag locked');
+  assert.equal(await page.evaluate(() => window.tagTest.requests), 1);
+  assert.deepEqual(await page.evaluate(() => window.tagTest.writes), beforeReconnect, 'Reconnecting must not replay actuator commands.');
+  assert.equal(await page.locator('#signal-bars').getAttribute('data-bars'), '0');
+  await page.locator('#finder').getByRole('button', { name: 'Done', exact: true }).click();
+  const reads = await page.evaluate(() => window.tagTest.signalReads);
+  await page.waitForTimeout(1200);
+  assert.equal(await page.evaluate(() => window.tagTest.signalReads), reads, 'Closing the finder must stop polling.');
+  await page.evaluate(() => { window.tagTest.signalSupported = false; window.tagTest.disconnect(); });
+  await state('Bag locked');
+  await page.locator('#find').click();
+  await signalLabel('Update tag firmware');
+  await page.locator('#finder-flash').click();
+  await page.locator('#finder-message').getByText('Tag is flashing.', { exact: true }).waitFor();
+  await page.locator('#finder').getByRole('button', { name: 'Done', exact: true }).click();
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.screenshot({ path: join(artifacts, 'desktop.png'), fullPage: true });
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), true);
+  assert.ok(await page.evaluate(() => window.tagTest.cameraStops >= 4));
+  assert.deepEqual(await page.evaluate(() => JSON.parse(localStorage.getItem('carry.remembered-tag.v1'))), { id: 'test-tag-A', name: 'Carry-A1B2C3', auto: true });
+  await page.reload();
+  await state('Lock your bag');
+  assert.equal(await page.evaluate(() => window.tagTest.requests), 0, 'Reload restoration must avoid the chooser.');
+  assert.equal(await page.evaluate(() => window.tagTest.connections), 1);
+  assert.equal(await page.evaluate(() => window.tagTest.enumerations), 1);
   await options();
   await page.locator('#disconnect').click();
-  await state('Connect your tag');
+  await state('Reconnect your tag');
   assert.equal(await page.locator('#unlock').isDisabled(), true);
-  assert.ok(await page.evaluate(() => window.tagTest.cameraStops >= 4));
+  await page.reload();
+  await state('Reconnect your tag');
+  await page.waitForTimeout(1200);
+  assert.equal(await page.evaluate(() => window.tagTest.connections), 0, 'Explicit disconnect must suppress restoration.');
+  await page.evaluate(() => {
+    const saved = JSON.parse(localStorage.getItem('carry.remembered-tag.v1'));
+    localStorage.setItem('carry.remembered-tag.v1', JSON.stringify({ ...saved, auto: true }));
+  });
+  await page.goto(`${baseURL}/?noRestore=1`);
+  await state('Reconnect your tag');
+  assert.equal(await page.evaluate(() => window.tagTest.requests), 0);
+  await page.locator('#connect').click();
+  await state('Lock your bag');
+  assert.equal(await page.evaluate(() => window.tagTest.requests), 1, 'Unsupported restoration falls back to a user-selected device.');
+  await options();
+  await page.locator('#forget-tag').click();
+  await state('Connect your tag');
+  assert.equal(await page.evaluate(() => localStorage.getItem('carry.remembered-tag.v1')), null);
   await page.goto(`${baseURL}/demo-passes.html`);
   assert.equal(await page.locator('.pass').count(), 2);
   assert.deepEqual(errors, []);
-  console.log(`Browser checks passed: scan-first setup, cancellation, real QR camera decoding, wrong-pass recovery, storage, manual entry and reconnect. Connect/lock/release: ${(cycleMs / 1000).toFixed(1)}s with simulated hardware.`);
+  console.log(`Browser checks passed: scan-first setup, QR decoding, pass recovery, storage, signal strength/trend, stale readings, disconnect/reconnect, polling cleanup and old firmware. Connect/lock/release: ${(cycleMs / 1000).toFixed(1)}s with simulated hardware.`);
   console.log(`Screenshots: ${artifacts}`);
 } finally { await browser.close(); }

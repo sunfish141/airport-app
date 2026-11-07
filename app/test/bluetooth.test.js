@@ -13,7 +13,7 @@ function packet({ sequence = 1, state = 0, error = 0, flags = 2, command = '-' }
   return new DataView(bytes.buffer);
 }
 
-function mock({ initial = {}, write = async () => {}, beforeRead } = {}) {
+function mock({ initial = {}, write = async () => {}, beforeRead, signalRead, signalMissing = false } = {}) {
   const reads = [];
   const connections = [];
   const characteristic = new EventTarget();
@@ -33,7 +33,12 @@ function mock({ initial = {}, write = async () => {}, beforeRead } = {}) {
       this.connected = true;
       return { getPrimaryService: async (uuid) => {
         assert.equal(uuid, UUIDS.service);
-        return { getCharacteristic: async (uuid) => uuid === UUIDS.status ? characteristic : { writeValueWithResponse: write } };
+        return { getCharacteristic: async (uuid) => {
+          if (uuid === UUIDS.status) return characteristic;
+          if (uuid === UUIDS.command) return { writeValueWithResponse: write };
+          if (uuid === UUIDS.signal && !signalMissing) return { readValue: signalRead || (async () => new DataView(Uint8Array.of(1, 1, 201, 0).buffer)) };
+          throw new DOMException('Characteristic not found.', 'NotFoundError');
+        } };
       } };
     },
     disconnect() { this.connected = false; device.dispatchEvent(new Event('gattserverdisconnected')); },
@@ -166,4 +171,102 @@ test('a missing confirmation times out and forces a fresh connection', async (co
   await result;
   assert.equal(connection.connected, false);
   assert.equal(connection.status, null);
+});
+
+test('proximity readings never acknowledge an actuator command and skip pending commands', async () => {
+  const { connection } = mock();
+  await connection.connect();
+  assert.deepEqual(await connection.readSignal(), { supported: true, rssi: -55 });
+  const locked = connection.send('L', 'A1B2C3D4E5F60718');
+  assert.equal(await connection.readSignal(), null);
+  assert.notEqual(connection.pending, null);
+  connection.accept(packet({ sequence: 2, state: 2, flags: 5, command: 'L' }));
+  await locked;
+  connection.disconnect();
+});
+
+test('GATT signal reads and command writes serialize without competing on the connection', async () => {
+  let releaseRead;
+  let reading = false;
+  let wrote = false;
+  const { connection } = mock({
+    signalRead: () => { reading = true; return new Promise((resolve) => { releaseRead = () => { reading = false; resolve(new DataView(Uint8Array.of(1, 1, 180, 0).buffer)); }; }); },
+    write: async () => { assert.equal(reading, false); wrote = true; },
+  });
+  await connection.connect();
+  const signal = connection.readSignal();
+  await new Promise(setImmediate);
+  const flashing = connection.send('F');
+  assert.equal(wrote, false);
+  releaseRead();
+  assert.equal((await signal).rssi, -76);
+  await new Promise(setImmediate);
+  assert.equal(wrote, true);
+  connection.accept(packet({ sequence: 2, command: 'F' }));
+  await flashing;
+  connection.disconnect();
+});
+
+test('old firmware and unavailable/corrupt telemetry leave lock control usable', async () => {
+  const old = mock({ signalMissing: true }).connection;
+  await old.connect();
+  assert.deepEqual(await old.readSignal(), { supported: false });
+  assert.equal(old.connected, true);
+  old.disconnect();
+  const unavailable = mock({ signalRead: async () => new DataView(Uint8Array.of(1, 0, 0, 0).buffer) }).connection;
+  await unavailable.connect();
+  assert.deepEqual(await unavailable.readSignal(), { supported: true, rssi: null });
+  assert.equal(unavailable.pending, null);
+  unavailable.disconnect();
+  const invalid = mock({ signalRead: async () => new DataView(Uint8Array.of(1, 1, 127, 0).buffer) }).connection;
+  await invalid.connect();
+  await assert.rejects(invalid.readSignal(), /Invalid signal/);
+  assert.equal(invalid.connected, true);
+  invalid.disconnect();
+});
+
+test('physical service recovery cancels a command queued behind a signal read before it can actuate', async () => {
+  let releaseRead;
+  let writes = 0;
+  const { connection } = mock({
+    signalRead: () => new Promise((resolve) => { releaseRead = resolve; }),
+    write: async () => { ++writes; },
+  });
+  await connection.connect();
+  const signal = connection.readSignal();
+  await new Promise(setImmediate);
+  const lock = assert.rejects(connection.send('L', 'A1B2C3D4E5F60718'), /Service opening/);
+  connection.accept(packet({ sequence: 2, command: 'S', state: 3, flags: 2 }));
+  await lock;
+  releaseRead(new DataView(Uint8Array.of(1, 1, 201, 0).buffer));
+  await signal;
+  await new Promise(setImmediate);
+  assert.equal(writes, 0);
+  connection.disconnect();
+});
+
+test('a hung proximity read is bounded and disconnects so it cannot block later commands', async (context) => {
+  context.mock.timers.enable({ apis: ['setTimeout'] });
+  const { connection } = mock({ signalRead: () => new Promise(() => {}) });
+  await connection.connect();
+  const result = assert.rejects(connection.readSignal(), /timed out/);
+  await new Promise(setImmediate);
+  context.mock.timers.tick(2500);
+  await result;
+  assert.equal(connection.connected, false);
+  await assert.rejects(connection.send('F'), /Connect/);
+});
+
+test('a read completing after disconnect/reconnect cannot supply a stale reading', async () => {
+  let release;
+  const { connection } = mock({ signalRead: () => new Promise((resolve) => { release = resolve; }) });
+  await connection.connect();
+  const signal = assert.rejects(connection.readSignal(), /disconnected/);
+  await new Promise(setImmediate);
+  connection.disconnect();
+  await connection.connect();
+  release(new DataView(Uint8Array.of(1, 1, 210, 0).buffer));
+  await signal;
+  assert.equal(connection.connected, true);
+  connection.disconnect();
 });

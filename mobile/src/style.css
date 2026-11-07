@@ -1,0 +1,7 @@
+body[data-native] { background: white; overscroll-behavior: none; }
+body[data-native] .shell {
+  width: 100%; max-width: 600px; min-height: 100dvh;
+  margin: 0 auto; border: 0; border-radius: 0;
+  padding: max(0px, env(safe-area-inset-top)) max(24px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) max(24px, env(safe-area-inset-left));
+}
+body[data-native] dialog { max-height: calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 32px); }

@@ -1,6 +1,8 @@
 # Carry luggage tag prototype
 
-One ESP-WROOM-32 tag, an SG90 servo, and an Android phone. Select `Carry-XXXXXX` over Bluetooth; NFC is not needed for this single-tag test. Use the included demo QR passes, not real airline boarding passes.
+One ESP-WROOM-32 tag, an SG90 servo, and a phone. Select `Carry-XXXXXX` over Bluetooth; NFC is not needed for this single-tag test. Use the included demo QR passes, not real airline boarding passes.
+
+Use the [native Android/iOS app](mobile/README.md) on a phone. It remembers the selected tag across launches and reconnects after signal loss while the app is open. The browser app remains available for previews and the firmware workbench.
 
 ## Try without hardware
 
@@ -18,9 +20,9 @@ In the preview: connect, scan pass A, then press **Setup button**. Scan A again 
 
 1. Follow the [wiring and test guide](<luggage_tag_complete_build_guide (1).md>).
 2. [Build and upload the firmware](firmware/README.md).
-3. [Open the phone app and run a lock/release cycle](app/README.md).
+3. [Install the mobile app](mobile/README.md) and run a lock/release cycle.
 
-The app and firmware remain separate projects.
+`mobile/` contains the native projects, `app/` contains the shared UI and browser previews, and `firmware/` contains the board code.
 
 | Reference | Contents |
 | --- | --- |

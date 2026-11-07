@@ -23,7 +23,8 @@ Open `/simulation.html` at the printed URL. The compiled firmware is included; n
 ## Controls
 
 - **Hardware assumptions & fault injection:** test a jam, switch faults, storage failure or corrupt saved state. Clear the injected fault before service opening.
-- **Cut main power / Reboot MCU:** retain saved assignment and bolt position. Interrupted movement requires recovery.
+- **Bluetooth signal test:** open **Find tag** in the phone and change the synthetic RSSI slider. Disable readings to test stale-data handling. The radio is simulated in JavaScript; the C++ controller still handles locking and recovery.
+- **Cut main power / Reboot MCU:** retain saved assignment and bolt position. The phone reconnects automatically when the tag is ready again; interrupted movement still requires recovery.
 - **Reset saved simulation:** clears the saved demo and faults. Normal reloads retain browser-saved state.
 - **Firmware state / Event trace:** inspect position confirmation, stored ownership and command results.
 - **Speed / Pause / Step:** control simulated time. The phone’s 5-second timeout still uses real time, so reconnect after a long pause.

@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Carry</string>
+    <string name="title_activity_main">Carry</string>
+    <string name="package_name">com.carry.tag</string>
+    <string name="custom_url_scheme">com.carry.tag</string>
+</resources>

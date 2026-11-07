@@ -1,0 +1,7 @@
+{
+  "appId": "com.carry.tag",
+  "appName": "Carry",
+  "webDir": "www",
+  "backgroundColor": "#ffffff",
+  "ios": { "contentInset": "automatic" }
+}

@@ -17,6 +17,14 @@ try {
   await phone.locator('#demo-label').waitFor();
   await page.locator('#demo-connect').click();
   await phone.locator('#connection-pill').getByText('Connected', { exact: true }).waitFor();
+  await phone.locator('#find').click();
+  await phone.locator('#signal-label').getByText('Strong signal', { exact: true }).waitFor();
+  await page.locator('.signal-tools summary').click();
+  await page.locator('#signal-missing').check();
+  await phone.locator('#signal-label').getByText('Signal unavailable', { exact: true }).waitFor();
+  await page.locator('#signal-missing').uncheck();
+  await phone.locator('#finder').getByRole('button', { name: 'Done', exact: true }).click();
+  await page.locator('.signal-tools summary').click();
   await phone.locator('#lock').click();
   await phone.locator('[data-demo-pass="1"]').click();
   await phone.locator('#state-label').getByText('Press the tag button', { exact: true }).waitFor();
@@ -59,8 +67,7 @@ try {
   assert.equal(await page.locator('body').evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
   await page.screenshot({ path: join(artifacts, 'mobile.png'), fullPage: true });
   await page.locator('#demo-reboot').click();
-  await phone.locator('#connect').waitFor();
-  await page.locator('#demo-connect').click();
+  await phone.locator('#state-label').getByText('Reconnecting to your tag', { exact: true }).waitFor();
   await phone.locator('#connection-pill').getByText('Connected', { exact: true }).waitFor();
   await page.locator('#demo-reset').click();
   await page.locator('#virtual-connection').getByText('Disconnected · No assignment', { exact: true }).waitFor();

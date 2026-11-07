@@ -28,7 +28,7 @@ Inputs use internal pull-ups: closing a switch pulls its GPIO LOW. Never apply 5
 
 Without endpoint switches, use two spare tactile buttons on GPIO32 and GPIO33 to simulate them. These indicate positions manually; they do not prove that the servo moved.
 
-1. [Upload the firmware](firmware/README.md) and [start the app](app/README.md).
+1. [Upload the firmware](firmware/README.md) and [install the mobile app](mobile/README.md).
 2. Hold only the open-position button while powering the tag. Keep it held until closing starts.
 3. Connect to `Carry-XXXXXX`, scan demo pass A, then hold the setup button for ½ second and release before 3 seconds.
 4. When closing starts, release the open button and press/hold the closed button before the movement timeout (initially 1 second). Wait for **Bag locked**.

@@ -21,6 +21,7 @@
         <button id="demo-connect" class="button primary">Connect virtual tag</button>
         <div class="button-pair"><button id="demo-setup" class="button">Setup button</button><button id="demo-service" class="button">Service open</button></div>
         <p class="hint">Setup: ½-second hold. Service: 3-second hold.</p>
+        <details class="signal-tools"><summary>Bluetooth signal test</summary><label>Simulated RSSI<input id="signal-level" type="range" min="-105" max="-35" step="1" value="-55" /></label><output id="signal-output">-55 dBm</output><label class="obstruction"><input id="signal-missing" type="checkbox" /> No signal readings</label><p class="hint">Open Find tag in the phone. These readings are synthetic.</p></details>
         <details class="pass-reference"><summary>Demo passes</summary>
         <div class="pass-pair"><div class="demo-pass"><img src="./demo-pass-1.svg" alt="QR for demo pass A" /><strong>Pass A</strong><code>A1B2…0718</code></div><div class="demo-pass"><img src="./demo-pass-2.svg" alt="QR for demo pass B" /><strong>Pass B</strong><code>9A8B…3021</code></div></div>
         <p class="hint">Choose A in the scanner to lock. Release with A; B will be rejected.</p></details>

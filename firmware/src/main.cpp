@@ -70,6 +70,16 @@ class Commands : public NimBLECharacteristicCallbacks {
     if (xQueueSend(commandQueue, &message, 0) != pdTRUE) overflow.store(true);
   }
 } commands;
+// Read the requesting phone's link, rather than a global/previous peer's RSSI.
+// This runs on the BLE task, keeping HCI queries out of the actuator loop.
+class Signal : public NimBLECharacteristicCallbacks {
+  void onRead(NimBLECharacteristic* characteristic, NimBLEConnInfo& info) override {
+    int8_t rssi = 127; // HCI sentinel: RSSI unavailable.
+    const bool valid = ble_gap_conn_rssi(info.getConnHandle(), &rssi) == 0 && rssi >= -127 && rssi <= 20;
+    const uint8_t bytes[] = {1, uint8_t(valid), valid ? uint8_t(rssi) : uint8_t(0), 0};
+    characteristic->setValue(bytes, sizeof(bytes));
+  }
+} signalCallbacks;
 class ServerCallbacks : public NimBLEServerCallbacks {
   void onDisconnect(NimBLEServer*, NimBLEConnInfo&, int) override { NimBLEDevice::startAdvertising(); }
 } serverCallbacks;
@@ -117,6 +127,10 @@ void setup() {
   auto* commandCharacteristic = service->createCharacteristic(config::COMMAND_UUID, NIMBLE_PROPERTY::WRITE, 64);
   commandCharacteristic->setCallbacks(&commands);
   statusCharacteristic = service->createCharacteristic(config::STATUS_UUID, NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::NOTIFY, 12);
+  auto* signalCharacteristic = service->createCharacteristic(config::SIGNAL_UUID, NIMBLE_PROPERTY::READ, 4);
+  signalCharacteristic->setCallbacks(&signalCallbacks);
+  const uint8_t noSignal[] = {1, 0, 0, 0};
+  signalCharacteristic->setValue(noSignal, sizeof(noSignal));
   controller.begin(record, result, {openInput.pressed(), closedInput.pressed()}, millis());
   service->start();
   auto* advertising = NimBLEDevice::getAdvertising();

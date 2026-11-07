@@ -4,9 +4,13 @@ import { normalizeToken } from './protocol.js';
 import { SimulatedTag } from './simulated-tag.js';
 import { FirmwareTag } from './firmware-tag.js';
 import { LockIntent } from './lock-intent.js';
+import { Proximity } from './proximity.js';
+import { TagReconnect } from './tag-reconnect.js';
 import './style.css';
 
 const $ = (id) => document.getElementById(id);
+const platform = globalThis.carryPlatform;
+const isVisible = () => platform ? platform.active : !document.hidden;
 const demoValue = new URLSearchParams(location.search).get('demo');
 const firmwareMode = demoValue === 'firmware';
 const demoMode = demoValue === '1' || firmwareMode;
@@ -22,6 +26,13 @@ let scanSession = 0;
 let controls;
 let demoScanOpcode = null;
 let setupDeadline = 0;
+const proximity = new Proximity();
+let signalSupport = null;
+let signalError = false;
+let signalEpoch = 0;
+let signalTimer;
+let connectedTagName = '';
+let reconnect;
 
 const errors = {
   TOKEN_MISMATCH: 'Wrong pass. Scan the pass used to lock this tag.',
@@ -53,7 +64,7 @@ function friendlyError(error, source = 'tag') {
 }
 
 const connection = new TagConnection({
-  ...(simulation ? { bluetooth: simulation.bluetooth } : {}),
+  ...(simulation ? { bluetooth: simulation.bluetooth } : platform ? { bluetooth: platform.bluetooth, requireSecureContext: false } : {}),
   onStatus(status) {
     latest = status;
     setupDeadline = performance.now() + status.setupMs;
@@ -65,20 +76,38 @@ const connection = new TagConnection({
     render();
   },
   onConnection(connected, name) {
+    reconnect?.handleConnection(connected);
     $('connection-pill').textContent = connected ? 'Connected' : 'Disconnected';
     $('device-name').textContent = connected ? name : '';
     if (!connected) {
+      stopSignalSearch();
       latest = null;
       released = false;
       setupDeadline = 0;
       intent.clear();
       stopScanner();
-      if (name.startsWith('Tag disconnected')) notice('Connection lost. Reconnect to continue.', true);
-    } else notice();
+      if (reconnect?.searching) notice();
+      else if (name.startsWith('Tag disconnected')) notice('Connection lost. Reconnect to continue.', true);
+    } else {
+      connectedTagName = name;
+      notice();
+      if ($('finder').open) startSignalSearch();
+    }
     if (simulation) publishDemoStatus(simulation.snapshot());
     render();
   },
 });
+let rememberedStorage = null;
+if (!simulation) { try { rememberedStorage = platform?.storage || localStorage; } catch { /* Same-page reconnection remains available. */ } }
+reconnect = new TagReconnect(connection, {
+  bluetooth: simulation ? simulation.bluetooth : platform?.bluetooth || navigator.bluetooth,
+  storage: rememberedStorage,
+  // Native permission dialogs can deactivate the app. Let the bounded
+  // connection attempt finish; new retries still pause in the background.
+  cancelOnHide: !platform,
+  onState() { render(); },
+});
+reconnect.setVisible(isVisible());
 
 function render() {
   const connected = connection.connected && Boolean(latest);
@@ -86,11 +115,14 @@ function render() {
   const state = connected ? latest.state : null;
   const waiting = connected && intent.pending;
   const moving = state === 'MOVING';
-  const canAct = connected && !busy && !moving && !waiting;
+  const retrying = !connected && reconnect?.searching;
+  const canAct = connected && !connection.connecting && !busy && !moving && !waiting;
   let title = 'Connect your tag';
   let detail = 'Switch it on and keep it nearby.';
   let icon = 'connect';
-  if (connecting) { title = 'Connecting…'; detail = 'Choose your tag in the Bluetooth list.'; }
+  if (retrying) { title = 'Reconnecting to your tag'; detail = `Looking for ${reconnect.name}. Keep it powered on and nearby.`; }
+  else if (connecting) { title = 'Connecting…'; detail = 'Choose your tag in the Bluetooth list.'; }
+  else if (!connected && reconnect?.remembered) { title = 'Reconnect your tag'; detail = `Keep ${reconnect.name} powered on and nearby.`; }
   else if (waiting) { title = 'Press the tag button'; detail = 'Hold for ½ second, then release. Your pass is scanned.'; icon = 'button'; }
   else if (state === 'OPEN_FREE') { title = released ? 'Bag released' : 'Lock your bag'; detail = released ? 'You can remove the cable.' : 'Insert the cable, then scan your pass.'; icon = released ? 'released' : 'bag'; }
   else if (state === 'LOCKED_ASSIGNED') { title = 'Bag locked'; detail = 'Scan the same pass to release.'; icon = 'locked'; }
@@ -103,8 +135,10 @@ function render() {
   $('state-icon').className = `state-icon ${icon === 'fault' ? 'fault' : icon === 'moving' ? 'moving' : ''}`;
   $('device-row').hidden = !connected;
   $('connect').hidden = connected;
-  $('connect').disabled = connecting;
-  $('connect').textContent = connecting ? 'Connecting…' : 'Connect tag';
+  $('connect').disabled = connecting || retrying;
+  $('connect').textContent = retrying ? 'Reconnecting…' : connecting ? 'Connecting…' : reconnect?.remembered ? 'Reconnect tag' : 'Connect tag';
+  $('cancel-reconnect').hidden = !retrying;
+  $('forget-tag').hidden = !reconnect?.remembered;
   $('lock').hidden = state !== 'OPEN_FREE' || waiting || moving;
   $('unlock').hidden = state !== 'LOCKED_ASSIGNED' || moving;
   $('lock').disabled = $('manual-lock').disabled = !(canAct && state === 'OPEN_FREE');
@@ -117,11 +151,71 @@ function render() {
   $('storage').hidden = state !== 'OPEN_FREE';
   $('storage').disabled = !(canAct && state === 'OPEN_FREE');
   $('flash').disabled = !canAct;
+  $('find').hidden = !connected;
+  $('find').disabled = $('find-in-options').disabled = !canAct || connecting;
+  $('finder-flash').disabled = !canAct;
   $('manual-lock').hidden = state !== 'OPEN_FREE';
   $('manual-unlock').hidden = state !== 'LOCKED_ASSIGNED';
   const remaining = Math.max(0, setupDeadline - performance.now());
   $('setup-line').hidden = !(state === 'OPEN_FREE' && remaining > 0 && !waiting && !busy);
   $('setup-time').textContent = `${Math.ceil(remaining / 1000)}s`;
+  renderFinder();
+}
+
+function renderFinder() {
+  if (!$('finder').open) return;
+  const sample = proximity.snapshot(performance.now());
+  let label = 'Checking signal…';
+  let trend = 'Hold the phone steady for a few seconds.';
+  let bars = 0;
+  let reading = '';
+  if (!connection.connected) { label = reconnect?.searching ? 'Reconnecting…' : 'Connection lost'; trend = reconnect?.searching ? `Looking for ${reconnect.name}. Move closer and keep the tag powered on.` : 'Reconnect to search again. The tag may be off or out of range.'; }
+  else if (!isVisible()) { label = 'Search paused'; trend = 'Return to the app to continue.'; }
+  else if (signalSupport === false) { label = 'Update tag firmware'; trend = 'This tag does not provide signal readings. You can still flash its light.'; }
+  else if (sample.state === 'stale') { label = 'Signal unavailable'; trend = 'No fresh reading. Move closer or reconnect.'; }
+  else if (sample.state === 'live') { label = sample.label; trend = sample.trend; bars = sample.bars; reading = `${sample.rssi} dBm · smoothed`; }
+  else if (signalError && sample.state === 'waiting') { label = 'Waiting for signal'; trend = 'No valid reading yet. Move closer or reconnect.'; }
+  if (!reading && proximity.lastAt !== null) reading = `Last reading ${Math.max(0, Math.floor((performance.now() - proximity.lastAt) / 1000))}s ago`;
+  // Avoid repeatedly announcing unchanged live-region text on each UI tick.
+  for (const [id, text] of [['finder-device', connectedTagName], ['signal-label', label], ['signal-trend', trend], ['signal-reading', reading]]) {
+    if ($(id).textContent !== text) $(id).textContent = text;
+  }
+  $('signal-bars').dataset.bars = String(bars);
+  $('signal-bars').setAttribute('aria-label', `${label}${bars ? `, ${bars} of 4 bars` : ''}`);
+  $('finder-reconnect').hidden = connection.connected || reconnect?.searching;
+  $('finder-stop').hidden = connection.connected || !reconnect?.searching;
+  $('finder-flash').hidden = !connection.connected;
+}
+function stopSignalSearch() { ++signalEpoch; clearTimeout(signalTimer); }
+function startSignalSearch() {
+  stopSignalSearch();
+  proximity.reset();
+  signalSupport = null;
+  signalError = false;
+  const epoch = signalEpoch;
+  async function poll() {
+    if (epoch !== signalEpoch || !$('finder').open || !isVisible() || !connection.connected) return;
+    try {
+      const sample = await connection.readSignal();
+      if (epoch !== signalEpoch) return;
+      if (sample) {
+        signalSupport = sample.supported;
+        signalError = sample.supported && sample.rssi === null;
+        if (sample.supported && sample.rssi !== null) proximity.add(sample.rssi, performance.now());
+      }
+    } catch { if (epoch === signalEpoch) signalError = true; }
+    if (epoch !== signalEpoch) return;
+    renderFinder();
+    if (signalSupport !== false && connection.connected) signalTimer = setTimeout(poll, 1000);
+  }
+  void poll();
+  renderFinder();
+}
+function openFinder() {
+  $('tag-options').close();
+  $('finder-message').textContent = '';
+  $('finder').showModal();
+  startSignalSearch();
 }
 
 function consumeIntent() {
@@ -164,6 +258,19 @@ function handleScan(opcode, token) {
   else void run(opcode, token);
 }
 async function scan(opcode) {
+  if (!simulation && platform) {
+    if (platform.scanning) return;
+    intent.clear(); stopScanner(); notice();
+    const session = scanSession;
+    try {
+      const result = await platform.scan();
+      if (session !== scanSession || !isVisible() || !connection.connected || !result) return;
+      handleScan(opcode, normalizeToken(result));
+    } catch (error) {
+      if (session === scanSession) notice(friendlyError(error, 'camera'), true);
+    }
+    return;
+  }
   if (!simulation && (!globalThis.isSecureContext || !navigator.mediaDevices?.getUserMedia)) {
     notice('Camera unavailable. Enter a demo token in Tag options.', true); return;
   }
@@ -210,17 +317,25 @@ function publishDemoStatus(status) {
 
 $('connect').addEventListener('click', async () => {
   connecting = true; notice(); render();
-  try { await connection.connect(); }
+  try { await reconnect.connect(); }
   catch (error) { notice(friendlyError(error), true); }
   finally { connecting = false; render(); }
 });
 $('help').addEventListener('click', () => $('help-dialog').showModal());
 $('options').addEventListener('click', () => $('tag-options').showModal());
-$('disconnect').addEventListener('click', () => { $('tag-options').close(); connection.disconnect(); notice(); });
+$('disconnect').addEventListener('click', () => { $('tag-options').close(); reconnect.stop(); connection.disconnect(); notice(); });
+$('cancel-reconnect').addEventListener('click', () => { reconnect.stop(); notice(); render(); });
+$('forget-tag').addEventListener('click', () => { $('tag-options').close(); reconnect.stop({ forget: true }); connection.disconnect(); notice(); });
 $('lock').addEventListener('click', () => scan('L'));
 $('unlock').addEventListener('click', () => scan('U'));
 $('storage').addEventListener('click', () => { $('tag-options').close(); void run('C'); });
 $('flash').addEventListener('click', () => { $('tag-options').close(); void run('F'); });
+$('find').addEventListener('click', openFinder);
+$('find-in-options').addEventListener('click', openFinder);
+$('finder').addEventListener('close', stopSignalSearch);
+$('finder-flash').addEventListener('click', async () => { await run('F'); $('finder-message').textContent = $('notice').textContent; });
+$('finder-reconnect').addEventListener('click', () => { $('finder').close(); $('connect').click(); });
+$('finder-stop').addEventListener('click', () => reconnect.stop());
 $('cancel-lock').addEventListener('click', () => { intent.clear(); notice(); render(); });
 $('cancel-scan').addEventListener('click', stopScanner);
 $('scanner').addEventListener('cancel', (event) => { event.preventDefault(); stopScanner(); });
@@ -233,8 +348,19 @@ $('manual-form').addEventListener('submit', (event) => {
     $('token').value = ''; $('tag-options').close(); handleScan(opcode, token);
   } catch { notice('Enter a 16-character demo token.', true); }
 });
-document.addEventListener('visibilitychange', () => { if (document.hidden) { stopScanner(); intent.clear(); render(); } });
-window.addEventListener('pagehide', () => { intent.clear(); stopScanner(); connection.disconnect(); simulation?.dispose(); });
+function visibilityChanged() {
+  reconnect.setVisible(isVisible());
+  if (!isVisible()) {
+    // Android's native scanner opens a camera Activity. Its result still
+    // belongs to this scan; a disconnect or explicit cancel invalidates it.
+    if (!platform?.scanning) stopScanner();
+    intent.clear(); stopSignalSearch(); render();
+  }
+  else if ($('finder').open) startSignalSearch();
+}
+if (platform) platform.onVisibility(visibilityChanged);
+else document.addEventListener('visibilitychange', visibilityChanged);
+window.addEventListener('pagehide', () => { intent.clear(); stopSignalSearch(); stopScanner(); reconnect.setVisible(false); connection.disconnect(); simulation?.dispose(); });
 setInterval(render, 200);
 
 if (simulation) {
@@ -251,12 +377,12 @@ if (simulation) {
     if (event.origin !== location.origin || event.source !== window.parent || event.data?.type !== 'carry-demo-action') return;
     const { action, value } = event.data;
     if (action === 'connect' && !connection.connected && !connection.connecting) $('connect').click();
-    else if (action === 'disconnect') connection.disconnect();
+    else if (action === 'disconnect') { reconnect.stop(); connection.disconnect(); }
     else if (action === 'setup') simulation.setup();
     else if (action === 'service') simulation.service();
     else if (action === 'obstruction') simulation.setObstructed(value);
     else if (action === 'reboot') simulation.reboot();
-    else if (action === 'reset') simulation.reset();
+    else if (action === 'reset') { reconnect.stop({ forget: true }); simulation.reset(); }
     else if (action === 'power') simulation.power?.(value);
     else if (action === 'button') simulation.button?.(value);
     else if (action === 'sensors') simulation.setSensors?.(value);
@@ -268,10 +394,23 @@ if (simulation) {
     else if (action === 'speed') simulation.setSpeed?.(value);
     else if (action === 'pause') simulation.setPaused?.(value);
     else if (action === 'step') simulation.step?.(value);
+    else if (action === 'signal') simulation.setSignal(value);
+    else if (action === 'signal-available') simulation.setSignalAvailable(value);
     publishDemoStatus(simulation.snapshot());
   });
   publishDemoStatus(simulation.snapshot());
   simulation.ready?.catch((error) => notice(`Simulation could not start: ${error.message}`, true));
-} else if (!globalThis.isSecureContext) notice('Open this app over HTTPS to connect your tag.', true);
-else if (!navigator.bluetooth) notice('Use Android Chrome to connect your tag.', true);
+}
+if (platform) {
+  document.body.dataset.native = 'true';
+  document.querySelector('.support-note').textContent = 'Allow Bluetooth and camera access when asked. Demo QR passes only.';
+  document.querySelector('.brand').addEventListener('click', (event) => event.preventDefault());
+  platform.onBack(() => {
+    const dialog = [...document.querySelectorAll('dialog[open]')].at(-1);
+    if (dialog?.id === 'scanner') stopScanner();
+    else dialog?.close();
+    return Boolean(dialog);
+  });
+} else if (!simulation && !globalThis.isSecureContext) notice('Open this app over HTTPS to connect your tag.', true);
+else if (!simulation && !navigator.bluetooth) notice('Use Android Chrome to connect your tag.', true);
 render();

@@ -2,6 +2,7 @@ export const UUIDS = Object.freeze({
   service: '7db10001-3a7e-4f5c-9b21-51c61a7e0001',
   command: '7db10002-3a7e-4f5c-9b21-51c61a7e0001',
   status: '7db10003-3a7e-4f5c-9b21-51c61a7e0001',
+  signal: '7db10004-3a7e-4f5c-9b21-51c61a7e0001',
 });
 
 export const STATES = ['OPEN_FREE', 'CLOSED_FREE', 'LOCKED_ASSIGNED', 'MOVING', 'FAULT'];
@@ -49,4 +50,16 @@ export function decodeStatus(value) {
 export function isNewer(sequence, previous) {
   const distance = (sequence - previous) >>> 0;
   return distance > 0 && distance < 0x80000000;
+}
+
+// A separate read-only characteristic: telemetry never completes a lock command.
+export function decodeSignal(value) {
+  const view = value instanceof DataView ? value : new DataView(value.buffer, value.byteOffset, value.byteLength);
+  if (view.byteLength !== 4 || view.getUint8(0) !== 1 || view.getUint8(1) > 1 || view.getUint8(3) !== 0) {
+    throw new Error('Unsupported signal reading.');
+  }
+  if (!view.getUint8(1)) return null;
+  const rssi = view.getInt8(2);
+  if (rssi < -127 || rssi > 20) throw new Error('Invalid signal strength.');
+  return rssi;
 }

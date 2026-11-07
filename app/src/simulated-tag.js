@@ -1,4 +1,5 @@
 import { UUIDS, STATES, ERRORS, normalizeToken } from './protocol.js';
+import { SimulatedSignal } from './simulated-signal.js';
 
 // An opt-in, in-memory peripheral for the mobile preview. No real radio or NVS.
 export class SimulatedTag {
@@ -15,11 +16,14 @@ export class SimulatedTag {
     this.setupUntil = 0;
     this.obstructed = false;
     this.flashing = false;
+    this.signal = new SimulatedSignal();
+    this.signalCharacteristic = { readValue: async () => this.signal.packet() };
     this.statusCharacteristic = new EventTarget();
     this.statusCharacteristic.startNotifications = async () => this.statusCharacteristic;
     this.statusCharacteristic.readValue = async () => this.packet();
     this.commandCharacteristic = { writeValueWithResponse: async (bytes) => this.receive(bytes) };
     this.device = new EventTarget();
+    this.device.id = 'carry-javascript-demo';
     this.device.name = 'Carry-DEMO';
     this.device.gatt = {
       connected: false,
@@ -31,6 +35,7 @@ export class SimulatedTag {
           return { getCharacteristic: async (id) => {
             if (id === UUIDS.command) return this.commandCharacteristic;
             if (id === UUIDS.status) return this.statusCharacteristic;
+            if (id === UUIDS.signal) return this.signalCharacteristic;
             throw new Error('Unknown simulated characteristic.');
           } };
         } };
@@ -57,6 +62,7 @@ export class SimulatedTag {
       state: this.state, error: this.error, assigned: this.token !== null,
       connected: this.device.gatt.connected, setupMs: this.setupMs,
       obstructed: this.obstructed, flashing: this.flashing,
+      rssi: this.signal.rssi, signalAvailable: this.signal.available,
     };
   }
   changed() { this.onChange(this.snapshot()); }
@@ -84,6 +90,8 @@ export class SimulatedTag {
     this.emit();
   }
   setObstructed(value) { this.obstructed = Boolean(value); this.changed(); }
+  setSignal(value) { this.signal.setRssi(value); this.changed(); }
+  setSignalAvailable(value) { this.signal.available = Boolean(value); this.changed(); }
 
   receive(bytes) {
     if (!this.device.gatt.connected) throw new Error('Simulated tag disconnected.');
@@ -161,6 +169,7 @@ export class SimulatedTag {
   }
   reset() {
     this.device.gatt.disconnect();
+    this.signal = new SimulatedSignal();
     clearTimeout(this.movementTimer);
     clearTimeout(this.flashTimer);
     this.token = this.pending = null;

@@ -1,6 +1,6 @@
 # BLE protocol v1
 
-Reference for custom clients. Normal testing uses the [phone app](../app/README.md). Connect to `Carry-XXXXXX`; use one controlling phone per tag. NFC is not involved.
+Reference for custom clients. Normal testing uses the [mobile app](../mobile/README.md). Select `Carry-XXXXXX`; use one controlling phone per tag. The app retains the selected platform device ID for reconnecting. The display name and boarding-pass token are not used to select a device automatically; no pass token is advertised. NFC is not involved.
 
 ## GATT
 
@@ -9,6 +9,7 @@ Reference for custom clients. Normal testing uses the [phone app](../app/README.
 | Service | `7db10001-3a7e-4f5c-9b21-51c61a7e0001` | Advertised |
 | Command | `7db10002-3a7e-4f5c-9b21-51c61a7e0001` | Write with response |
 | Status | `7db10003-3a7e-4f5c-9b21-51c61a7e0001` | Read, notify |
+| Signal | `7db10004-3a7e-4f5c-9b21-51c61a7e0001` | Read; optional on older firmware |
 
 ## Commands
 
@@ -48,4 +49,10 @@ Subscribe before the initial read; ignore duplicate/older sequences using unsign
 
 Allow one outstanding command. A write response confirms delivery only. Wait for a newer matching-source status with either an error or the target state: `L → LOCKED_ASSIGNED`, `U → OPEN_FREE`, `C → CLOSED_FREE`. `MOVING` is not completion; `F` acknowledges the flash request.
 
-The app waits 5 seconds. A disconnect or missing result requires reconnect/readback, not automatic retry. A newer `S` event interrupts a pending movement request. Errors do not replace the state: a wrong pass leaves the tag locked. A fault requires physical recovery.
+The app waits 5 seconds. A disconnect or missing result requires reconnect/readback; movement commands are never retried automatically. Connection retries use the retained device, increasing the delay from 1 second to a maximum of 30 seconds. Each connection handshake is limited to 10 seconds. Retries pause in the background and stop on manual disconnect/forget. After reconnecting, resubscribe and read fresh status before enabling controls. A newer `S` event interrupts a pending movement request. Errors do not replace the state: a wrong pass leaves the tag locked. A fault requires physical recovery.
+
+## Signal readings
+
+Reading Signal queries RSSI for the requesting phone’s connection using NimBLE `ble_gap_conn_rssi`. Its independent 4-byte response is `[version=1, valid=0/1, signed RSSI in dBm, reserved=0]`. Accept RSSI only when valid is 1 and the value is −127 through +20; HCI’s +127 unavailable sentinel is never valid. This is signal received by the tag, not a distance or position measurement.
+
+The finder reads about once per second while visible. It requires 3 valid readings, uses a 5-sample median plus smoothing, and gives bands with 3 dB hysteresis. A sustained change of at least 5 dB gives stronger/weaker guidance; noisy samples suppress that trend. After 5 seconds without valid data, clear the indication. Reads/writes are serialized, with reads skipped during pending commands and a 2.5-second read timeout. These packets never confirm an actuator command. Missing Signal support leaves lock/release available.

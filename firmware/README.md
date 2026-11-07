@@ -27,7 +27,8 @@ Rebuild and upload after changes. Rebuild the [browser simulation](simulation/RE
 
 - **Setup:** while open/unassigned, hold GPIO27’s button for at least ½ second and release before 3 seconds. Setup lasts 10 seconds; normally scan the pass first and press when prompted.
 - **Service open:** hold for 3 seconds. This bypasses pass matching; correct any obstruction or conflicting switches first.
-- **Optional LED:** slow blink during setup, faster blink on fault. **Find tag** flashes it for 2 seconds.
+- **Optional LED:** slow blink during setup, faster blink on fault. **Flash light** flashes it for 2 seconds.
+- **Proximity:** the phone’s **Find tag** view reads connection signal strength from the tag. Re-upload after this update; older firmware continues to lock/release but cannot report signal strength.
 
 Both endpoint contacts are required. Reboot preserves assignment; interrupted movement or invalid endpoint readings require recovery. Completion always depends on an endpoint contact, not elapsed servo time.
 

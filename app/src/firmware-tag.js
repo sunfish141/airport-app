@@ -1,5 +1,6 @@
 import { UUIDS } from './protocol.js';
 import { FirmwareMachine } from './firmware-machine.js';
+import { SimulatedSignal } from './simulated-signal.js';
 
 const STORAGE_KEY = 'carry.firmware-workbench.v1';
 
@@ -15,6 +16,8 @@ export class FirmwareTag {
     this.lastSavedAt = 0;
     this.lastSaves = -1;
     this.persistence = 'browser';
+    this.signal = new SimulatedSignal();
+    this.signalCharacteristic = { readValue: async () => this.signal.packet() };
     this.statusCharacteristic = new EventTarget();
     this.statusCharacteristic.startNotifications = async () => this.statusCharacteristic;
     this.statusCharacteristic.readValue = async () => this.machine.packet;
@@ -22,6 +25,7 @@ export class FirmwareTag {
       if (!this.machine?.command(bytes)) throw new Error('Firmware is off, booting, or its command queue is full.');
     } };
     this.device = new EventTarget();
+    this.device.id = 'carry-firmware-demo';
     this.device.name = 'Carry-FIRMWARE';
     this.device.gatt = {
       connected: false,
@@ -35,6 +39,7 @@ export class FirmwareTag {
           return { getCharacteristic: async (id) => {
             if (id === UUIDS.status) return this.statusCharacteristic;
             if (id === UUIDS.command) return this.commandCharacteristic;
+            if (id === UUIDS.signal) return this.signalCharacteristic;
             throw new Error('Unknown firmware characteristic.');
           } };
         } };
@@ -90,6 +95,7 @@ export class FirmwareTag {
     return {
       ...(this.machine ? this.machine.snapshot() : { engine: 'firmware', state: 'BOOTING', ready: false, powered: false, error: 'NONE' }),
       connected: this.device.gatt.connected, paused: this.paused, speed: this.speed,
+      rssi: this.signal.rssi, signalAvailable: this.signal.available,
       ...(this.loadError ? { ready: false, state: 'LOAD_ERROR' } : {}),
       persistence: this.persistence, loadError: this.loadError,
       sourceHash: this.manifest?.sourceHash, events: this.events.slice(-100),
@@ -123,6 +129,8 @@ export class FirmwareTag {
   setup() { this.machine?.exports.sim_hold(650); this.flush(); }
   service() { this.machine?.exports.sim_hold(3200); this.flush(); }
   button(value) { this.machine?.exports.sim_button(value ? 1 : 0); this.flush(); }
+  setSignal(value) { this.signal.setRssi(value); this.flush(); }
+  setSignalAvailable(value) { this.signal.available = Boolean(value); this.flush(); }
   setObstructed(value) { const s = this.machine.snapshot(); this.machine.exports.sim_faults(value ? 1 : 0, s.sensorMode, s.failWrites ? 1 : 0); this.flush(); }
   setSensors(value) { const s = this.machine.snapshot(); this.machine.exports.sim_faults(s.obstructed ? 1 : 0, Number(value), s.failWrites ? 1 : 0); this.flush(); }
   setStorageFailure(value) { const s = this.machine.snapshot(); this.machine.exports.sim_faults(s.obstructed ? 1 : 0, s.sensorMode, value ? 1 : 0); this.flush(); }
@@ -143,6 +151,7 @@ export class FirmwareTag {
   step(value = 20) { this.machine?.advance(Number(value)); this.flush(); }
   reset() {
     this.device.gatt.disconnect();
+    this.signal = new SimulatedSignal();
     if (!this.machine || this.loadError) {
       try { localStorage.removeItem(STORAGE_KEY); } catch { /* Session-only storage. */ }
       location.reload();

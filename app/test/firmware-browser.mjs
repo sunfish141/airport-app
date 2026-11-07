@@ -23,6 +23,17 @@ try {
   assert.equal(wasmRequests.length, 1);
   await page.locator('#connect-firmware').click();
   await phone.locator('#connection-pill').getByText('Connected', { exact: true }).waitFor();
+  await phone.locator('#find').click();
+  await phone.locator('#signal-label').getByText('Strong signal', { exact: true }).waitFor();
+  await page.locator('summary').getByText('Bluetooth signal test', { exact: true }).click();
+  await page.locator('#signal-level').evaluate((element) => { element.value = '-100'; element.dispatchEvent(new Event('input', { bubbles: true })); });
+  await phone.locator('#signal-label').getByText('Very weak signal', { exact: true }).waitFor();
+  await page.locator('#signal-missing').check();
+  await phone.locator('#signal-label').getByText('Signal unavailable', { exact: true }).waitFor();
+  assert.equal(await phone.locator('#signal-bars').getAttribute('data-bars'), '0');
+  await page.locator('#signal-missing').uncheck();
+  await phone.locator('#finder').getByRole('button', { name: 'Done', exact: true }).click();
+  await page.locator('summary').getByText('Bluetooth signal test', { exact: true }).click();
   const cycleStart = Date.now();
   await phone.locator('#lock').click();
   await phone.locator('[data-demo-pass="1"]').click();

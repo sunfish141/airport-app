@@ -36,7 +36,9 @@ h3 { font-size: 12px; }
 .demo-pass img { width: 100%; display: block; }
 .demo-pass strong, .demo-pass code { display: block; font-size: 11px; margin-top: 5px; }
 .demo-pass code { font-size: 9px; color: #6c7973; }
-.recovery-tools, .pass-reference { margin-top: 22px; border-top: 1px solid #dce3da; border-bottom: 1px solid #dce3da; padding: 15px 0; font-size: 11px; }
+.recovery-tools, .pass-reference, .signal-tools { margin-top: 22px; border-top: 1px solid #dce3da; border-bottom: 1px solid #dce3da; padding: 15px 0; font-size: 11px; }
+.signal-tools > label:first-of-type { display: grid; gap: 12px; margin: 18px 0 12px; }
+.signal-tools input[type=range] { width: 100%; accent-color: #164b41; }
 summary { cursor: pointer; }
 .obstruction { display: flex; align-items: center; gap: 7px; margin-top: 15px; }
 .obstruction input { accent-color: #164b41; }
