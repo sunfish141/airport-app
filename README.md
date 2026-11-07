@@ -24,6 +24,8 @@ Open the printed localhost URL for desktop layout development. For phone operati
 
 For an interactive mobile preview without hardware, run `npm run emulator` inside `app/`. It opens a phone frame with selectable screen sizes, rotation and a virtual tag. See [`app/README.md`](app/README.md#mobile-emulator) for the demo workflow and recovery controls.
 
+To run the actual production controller in a visual hardware simulation, use `npm run simulate` inside `app/`. The [firmware workbench](firmware/simulation/README.md) compiles `Controller.cpp` to WebAssembly and connects it to an animated bolt/servo model, production debounce, simulated NVS, fault injection and the same phone app. The compiled module is included; rebuilding after firmware edits requires Zig. Source/binary hashes prevent silently using a stale build.
+
 The printable passes are available through **Demo passes** or `/demo-passes.html`. Two QR SVGs and the printable page are committed in `app/public/`; `npm run passes` regenerates them. Each QR contains only its synthetic 16-character token. The app does not parse real airline barcodes. Camera decoding uses [`@zxing/browser`](https://github.com/zxing-js/browser); manual token entry is available if camera access is unavailable.
 
 ## Firmware

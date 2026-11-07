@@ -9,11 +9,18 @@
   "scripts": {
     "dev": "vite --host 127.0.0.1",
     "emulator": "vite --host 127.0.0.1 --open /emulator.html",
+    "presimulate": "npm run firmware:check",
+    "simulate": "vite --host 127.0.0.1 --open /simulation.html",
+    "firmware:build": "python3 ../tools/build-firmware-wasm.py",
+    "firmware:check": "node scripts/check-firmware-build.js",
+    "prebuild": "npm run firmware:check",
     "build": "vite build",
     "preview": "vite preview --host 127.0.0.1",
     "test": "node --test --experimental-test-isolation=none test/*.test.js",
+    "pretest": "npm run firmware:check",
     "test:browser": "node test/browser-smoke.mjs",
     "test:emulator": "node test/emulator-browser.mjs",
+    "test:simulation": "node test/firmware-browser.mjs",
     "passes": "node scripts/generate-passes.js"
   },
   "dependencies": {

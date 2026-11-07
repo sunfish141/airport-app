@@ -1,0 +1,15 @@
+{
+  "schema": 1,
+  "sources": [
+    "firmware/src/Controller.cpp",
+    "firmware/include/Controller.h",
+    "firmware/include/Config.h",
+    "firmware/simulation/Simulator.cpp",
+    "tools/build-firmware-wasm.py"
+  ],
+  "sourceHash": "626835f2f345f99e54882109bb4677e6dc64938d3d5f7b9de2d22f1a6f4f30a4",
+  "wasmHash": "6c0904b682f46dd2226e2ce0a652fdf933f7f0623cd46b3d8b8c33b38487b177",
+  "compiler": "Zig 0.14.1 C++",
+  "target": "wasm32-wasi",
+  "controllerSource": "Controller.cpp.txt"
+}

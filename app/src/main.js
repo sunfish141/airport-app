@@ -2,11 +2,14 @@ import { BrowserQRCodeReader } from '@zxing/browser';
 import { TagConnection, errorMessage } from './bluetooth.js';
 import { normalizeToken } from './protocol.js';
 import { SimulatedTag } from './simulated-tag.js';
+import { FirmwareTag } from './firmware-tag.js';
 import './style.css';
 
 const $ = (id) => document.getElementById(id);
-const demoMode = new URLSearchParams(location.search).get('demo') === '1';
-const simulation = demoMode
+const demoValue = new URLSearchParams(location.search).get('demo');
+const firmwareMode = demoValue === 'firmware';
+const demoMode = demoValue === '1' || firmwareMode;
+const simulation = firmwareMode ? new FirmwareTag({ onChange: publishDemoStatus }) : demoMode
   ? new SimulatedTag({ onChange: publishDemoStatus })
   : null;
 let busy = false;
@@ -178,10 +181,11 @@ document.addEventListener('visibilitychange', () => { if (document.hidden) stopS
 window.addEventListener('pagehide', () => { stopScanner(); connection.disconnect(); simulation?.dispose(); });
 setInterval(render, 200);
 if (simulation) {
-  document.querySelector('.brand').href = './?demo=1';
+  document.querySelector('.brand').href = firmwareMode ? './?demo=firmware' : './?demo=1';
   const banner = document.createElement('div');
   banner.className = 'demo-banner';
   banner.innerHTML = '<strong>Demo mode · Virtual tag</strong><span>No real Bluetooth or motor</span><div><button id="quick-setup">Start setup</button><button id="quick-service">Service open</button></div>';
+  if (firmwareMode) banner.innerHTML = '<strong>Production firmware · Simulated hardware</strong><span>C++ controller running in WebAssembly</span><div><button id="quick-setup">Hold for setup · 650 ms</button><button id="quick-service">Hold for service · 3.2 s</button></div>';
   document.body.prepend(banner);
   $('quick-setup').addEventListener('click', () => simulation.setup());
   $('quick-service').addEventListener('click', () => simulation.service());
@@ -200,9 +204,21 @@ if (simulation) {
     else if (action === 'obstruction') simulation.setObstructed(value);
     else if (action === 'reboot') simulation.reboot();
     else if (action === 'reset') simulation.reset();
+    else if (action === 'power') simulation.power?.(value);
+    else if (action === 'button') simulation.button?.(value);
+    else if (action === 'sensors') simulation.setSensors?.(value);
+    else if (action === 'storage-failure') simulation.setStorageFailure?.(value);
+    else if (action === 'corrupt-storage') simulation.corruptStorage?.();
+    else if (action === 'travel') simulation.setTravel?.(value);
+    else if (action === 'position') simulation.setPosition?.(value);
+    else if (action === 'cable') simulation.setCable?.(value);
+    else if (action === 'speed') simulation.setSpeed?.(value);
+    else if (action === 'pause') simulation.setPaused?.(value);
+    else if (action === 'step') simulation.step?.(value);
     publishDemoStatus(simulation.snapshot());
   });
   publishDemoStatus(simulation.snapshot());
   notice('Demo mode: connect the virtual tag, start setup, then scan a demo pass.');
+  simulation.ready?.catch((error) => notice(`Firmware simulation could not start: ${error.message}`, true));
 } else if (!globalThis.isSecureContext) notice('Open this app over HTTPS on Android Chrome to enable Bluetooth and the camera.', true);
 else if (!navigator.bluetooth) notice('Web Bluetooth is unavailable in this browser. Open this app in Android Chrome.', true);

@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#163d36" />
+  <title>Carry · Firmware workbench</title>
+</head>
+<body>
+  <header class="bench-header"><a class="bench-brand" href="./">carry.</a><div><h1>Firmware workbench</h1><p>Production C++ controller · simulated hardware</p></div><nav><a href="./emulator.html">Mobile preview ↗</a><a href="./">Real app ↗</a></nav></header>
+  <main class="bench-layout">
+    <section class="mechanism-column">
+      <div class="bench-title"><div><span class="eyebrow">INSIDE THE TAG</span><h2>Watch the firmware move the bolt.</h2></div><span id="engine-state" class="engine-pill">Loading WebAssembly…</span></div>
+      <div id="load-error" class="load-error" role="alert" hidden></div>
+      <div class="clock-toolbar"><span id="sim-time">0.00 s</span><label>Speed <select id="sim-speed"><option value="0.25">¼×</option><option value="1" selected>1×</option><option value="4">4×</option></select></label><button id="pause-sim">Pause</button><button id="step-sim" disabled>Step 20 ms</button><span class="clock-note">Simulation clock · phone timeout uses wall time</span></div>
+      <div class="mechanism-card">
+        <svg id="mechanism" viewBox="0 0 1000 480" role="img" aria-labelledby="mechanism-title mechanism-description">
+          <title id="mechanism-title">Illustrative luggage tag cutaway</title><desc id="mechanism-description">A servo moves a sliding bolt through a cable eyelet. Position switches feed the firmware controller. The battery supplies a boost converter, controller and servo.</desc>
+          <defs><pattern id="board-grid" width="20" height="20" patternUnits="userSpaceOnUse"><circle cx="1" cy="1" r="1" fill="#dce3d8" /></pattern><linearGradient id="steel"><stop stop-color="#9ba9ab"/><stop offset=".5" stop-color="#edf1ed"/><stop offset="1" stop-color="#8a999b"/></linearGradient></defs>
+          <rect width="1000" height="480" fill="url(#board-grid)" />
+          <rect x="265" y="66" width="665" height="195" rx="24" fill="#e7eddf" stroke="#c2cfb8" stroke-width="2" />
+          <text x="575" y="91" text-anchor="middle" class="svg-small">LOAD-BEARING BASE + BOLT GUIDES</text>
+          <path id="cable-loop" d="M710 112 C695 20 905 8 915 96 L915 182 Q915 225 865 225" fill="none" stroke="#657c7b" stroke-width="9" stroke-linecap="round" />
+          <g id="eyelet"><ellipse cx="710" cy="150" rx="20" ry="39" fill="#8c9e9a" stroke="#586d69" stroke-width="3"/><ellipse cx="710" cy="150" rx="10" ry="26" fill="#f4f6ef"/></g>
+          <circle cx="865" cy="225" r="13" fill="#83928b" stroke="#55685f" stroke-width="3"/><circle cx="865" cy="225" r="5" fill="#dfe6db" />
+          <g id="bolt"><rect x="455" y="139" width="371" height="22" rx="8" fill="url(#steel)" stroke="#829492" stroke-width="2"/><circle cx="472" cy="150" r="5" fill="#596f68"/></g>
+          <path d="M499 122 L499 181 M524 122 L524 181 M781 122 L781 181 M806 122 L806 181" stroke="#a8b991" stroke-width="14"/>
+          <text x="704" y="210" text-anchor="middle" class="svg-small">REMOVABLE EYELET</text>
+          <text x="865" y="251" text-anchor="middle" class="svg-small">FIXED ANCHOR</text>
+          <g id="open-switch"><rect x="300" y="108" width="43" height="22" rx="4" fill="#fff" stroke="#acb7a3"/><path d="M309 108 L334 96" stroke="#71836a" stroke-width="3"/><circle id="open-contact" cx="308" cy="119" r="4" fill="#8a9a83"/></g>
+          <text x="320" y="82" text-anchor="middle" class="svg-label">OPEN · GPIO5</text>
+          <g id="closed-switch"><rect x="822" y="108" width="43" height="22" rx="4" fill="#fff" stroke="#acb7a3"/><path d="M830 108 L855 96" stroke="#71836a" stroke-width="3"/><circle id="closed-contact" cx="830" cy="119" r="4" fill="#8a9a83"/></g>
+          <text x="843" y="82" text-anchor="middle" class="svg-label">CLOSED · GPIO6</text>
+          <path id="sensor-wires" d="M320 132 V282 H460 V324 M843 132 V283 H480 V324" fill="none" stroke="#a5b97e" stroke-width="2" stroke-dasharray="5 5" />
+          <rect x="365" y="292" width="98" height="67" rx="9" fill="#658a93" stroke="#3b636d" stroke-width="2"/><rect x="383" y="281" width="63" height="18" rx="4" fill="#36565b"/>
+          <circle cx="414" cy="291" r="12" fill="#ced8d4" stroke="#5f7470" stroke-width="2"/>
+          <line id="linkage" x1="414" y1="271" x2="472" y2="150" stroke="#8f9a91" stroke-width="5"/>
+          <g id="servo-horn"><rect x="408" y="259" width="12" height="48" rx="6" fill="#eff2e9" stroke="#78908a" stroke-width="2"/><circle cx="414" cy="291" r="4" fill="#5f7470"/></g>
+          <text x="414" y="382" text-anchor="middle" class="svg-label">SG90 SERVO</text>
+          <path id="servo-power" d="M310 364 H348 V337 H365" fill="none" stroke="#d19b70" stroke-width="4" />
+          <path id="controller-power" d="M310 364 H326 V425 H542 V392" fill="none" stroke="#d19b70" stroke-width="4"/>
+          <path d="M450 417 L450 433 L465 425 Z M467 417 V433" fill="#d19b70" stroke="#ad805b" stroke-width="2"/><text x="457" y="448" text-anchor="middle" class="svg-small">SCHOTTKY BRANCH</text>
+          <path id="pwm-wire" d="M523 357 H490 V318 H463" fill="none" stroke="#639e99" stroke-width="3" stroke-dasharray="7 4"/>
+          <rect x="523" y="325" width="149" height="67" rx="9" fill="#d0ddc1" stroke="#96ae84" stroke-width="2"/>
+          <rect x="550" y="335" width="46" height="46" rx="5" fill="#71856d"/>
+          <text x="625" y="347" text-anchor="middle" class="svg-small">XIAO</text><text x="625" y="363" text-anchor="middle" class="svg-small">ESP32C3</text>
+          <circle id="board-led" cx="651" cy="378" r="5" fill="#7c8b76"/>
+          <text x="596" y="414" text-anchor="middle" class="svg-label">CONTROLLER · ACTUAL C++</text>
+          <rect x="215" y="332" width="95" height="64" rx="9" fill="#ecddc6" stroke="#b7a387" stroke-width="2"/><text x="262" y="359" text-anchor="middle" class="svg-label">BOOST</text><text x="262" y="378" text-anchor="middle" class="svg-small">5 V supply</text>
+          <path id="battery-wire" d="M133 364 H215" stroke="#d19b70" stroke-width="4"/>
+          <rect x="140" y="359" width="16" height="10" rx="2" fill="#fff" stroke="#ad805b"/><text x="148" y="389" text-anchor="middle" class="svg-small">FUSE</text>
+          <rect x="41" y="339" width="92" height="50" rx="17" fill="#dce4ca" stroke="#9eae8d" stroke-width="2"/><text x="86" y="369" text-anchor="middle" class="svg-label">18650</text>
+          <circle id="power-contact" cx="172" cy="364" r="9" fill="#fff" stroke="#6c8378" stroke-width="3"/>
+          <text x="172" y="324" text-anchor="middle" class="svg-small">MAIN SWITCH</text>
+          <rect x="729" y="314" width="174" height="82" rx="10" fill="#fff" stroke="#d6dfcf"/>
+          <text x="816" y="337" text-anchor="middle" class="svg-label">NVS / FLASH</text><text id="diagram-nvs" x="816" y="360" text-anchor="middle" class="svg-small">Waiting for firmware</text><text id="diagram-pending" x="816" y="379" text-anchor="middle" class="svg-small">pending: —</text>
+          <path id="nvs-wire" d="M672 357 H729" fill="none" stroke="#b8c5a9" stroke-width="3"/>
+          <text x="24" y="470" class="svg-small">ILLUSTRATIVE GEOMETRY · LINEAR TRAVEL MODEL · NOT CAD OR A CIRCUIT VALIDATION</text>
+        </svg>
+        <div class="mechanism-caption"><strong id="mechanical-state">Loading controller…</strong><button id="toggle-cable" disabled>Remove cable eyelet</button><span id="cable-message">Cable geometry has no firmware interlock.</span></div>
+      </div>
+      <div class="telemetry-grid">
+        <article><span>Bolt travel</span><strong id="position-value">—</strong><small>0% open · 100% closed</small></article>
+        <article><span>Servo output · GPIO10</span><strong id="pwm-value">—</strong><small id="pwm-detail">50 Hz pulse control</small></article>
+        <article><span>Open switch · GPIO5</span><strong id="open-value">—</strong><small id="open-stable">30 ms debounce</small></article>
+        <article><span>Closed switch · GPIO6</span><strong id="closed-value">—</strong><small id="closed-stable">30 ms debounce</small></article>
+      </div>
+      <section class="control-card"><div><h3>Physical controls</h3><p>Presets hold the raw button for the shown duration; firmware handles the timing.</p></div><div class="physical-controls"><button id="physical-button" disabled>Hold physical button</button><button id="setup-hold" disabled>Setup hold · 650 ms</button><button id="service-hold" disabled>Service hold · 3.2 s</button><button id="main-power" disabled>Cut main power</button><button id="reboot-tag" disabled>Reboot MCU</button></div><p id="button-reading" class="small-note">GPIO7 · released · HIGH</p></section>
+      <section class="explanation-card"><h3 id="phase-title">Loading firmware</h3><p id="phase-copy">The workbench loads a compiled copy of the production controller.</p><div class="memory-row"><span>RAM ownership <strong id="ram-assigned">—</strong></span><span>NVS ownership <strong id="nvs-assigned">—</strong></span><span>Stored intent <strong id="nvs-pending">—</strong></span><span>Flash commits <strong id="nvs-saves">—</strong></span></div></section>
+      <details class="fault-card" open><summary>Hardware assumptions & fault injection</summary><div class="fault-grid"><label>Full-stroke travel (assumed)<input id="travel-time" type="range" min="100" max="1500" step="50" value="650" /><output id="travel-output">650 ms</output></label><label>Endpoint wiring<select id="sensor-fault"><option value="0">Automatic contacts</option><option value="1">Both switches active</option><option value="2">Neither switch active</option><option value="3">Open wire disconnected</option><option value="4">Closed wire disconnected</option></select></label><label class="check-label"><input id="jam" type="checkbox" /> Jam the bolt mid-travel</label><label class="check-label"><input id="storage-failure" type="checkbox" /> Fail NVS writes</label><label>Manual release / bolt position<input id="manual-position" type="range" min="0" max="1" step="0.01" value="0" /><small>Available only with PWM detached. Does not clear ownership.</small></label><div class="fault-buttons"><button id="corrupt-nvs">Corrupt stored CRC</button><button id="reset-workbench">Reset saved simulation</button></div></div><p class="small-note">Configured pulses are assumed calibrated. The plant assumes 12 ms contact bounce and motor motion stops when PWM is detached. Real SG90 current, holding force, binding, battery sag and brownouts are not calculated. PWM removal on real hardware does not guarantee motor power cutoff.</p></details>
+      <section class="trace-card"><div class="trace-heading"><h3>Firmware event trace</h3><label><input id="show-contacts" type="checkbox" /> Include raw contact bounce</label><button id="clear-trace">Clear view</button></div><ol id="trace" aria-label="Timestamped firmware events"></ol></section>
+      <details class="parity-card"><summary>What is running, and what is modeled?</summary><table><thead><tr><th>Production code</th><th>Workbench equivalent</th></tr></thead><tbody><tr><td>Controller.cpp / Controller.h / Config.h</td><td>Same files compiled to WebAssembly, including token checks, recovery and 30 ms debounce</td></tr><tr><td>main.cpp loop ordering</td><td>2 ms fixed steps: plant → input sampling → controller tick → one queued command → LED</td></tr><tr><td>Preferences / NVS</td><td>Same 28-byte CRC-protected record; simulated atomic saves; saved in this browser across reloads</td></tr><tr><td>LEDC / SG90 / linkage</td><td>Configured pulses drive an assumed linear stroke and endpoint geometry</td></tr><tr><td>NimBLE characteristics</td><td>GATT-shaped in-process transport; production command and 12-byte status frames; no radio stack</td></tr><tr><td>Battery, boost, mechanics and load</td><td>Illustrative drawing and fault injection; no electrical, force or ESP32 CPU emulation</td></tr></tbody></table><p id="source-version">Checking build…</p><a href="./firmware/Controller.cpp.txt" target="_blank" rel="noopener">Inspect the compiled Controller.cpp source ↗</a></details>
+    </section>
+    <aside class="phone-column"><div class="phone-heading"><div><span class="eyebrow">THE SAME PHONE APP</span><h2>Scan. Command. Confirm.</h2></div><button id="connect-firmware" disabled>Connect</button></div><p class="phone-help">Start a setup hold, then scan pass A in the phone. Pass B should fail to unlock A’s assignment.</p><div class="workbench-phone"><iframe id="firmware-phone" src="./?demo=firmware" title="Phone app connected to production firmware" width="390" height="844"></iframe></div><p id="phone-connection" class="small-note">Connecting transport…</p></aside>
+  </main>
+  <script type="module" src="/src/workbench.js"></script>
+</body>
+</html>

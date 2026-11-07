@@ -1,0 +1,7 @@
+firmware/src/Controller.cpp text eol=lf
+firmware/include/Controller.h text eol=lf
+firmware/include/Config.h text eol=lf
+firmware/simulation/Simulator.cpp text eol=lf
+tools/build-firmware-wasm.py text eol=lf
+app/public/firmware/Controller.cpp.txt text eol=lf
+*.wasm binary

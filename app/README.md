@@ -1,6 +1,6 @@
 # Phone app
 
-Independent plain JavaScript/Vite project. Requires Node.js 22.16+.
+Plain JavaScript/Vite app. Requires Node.js 22.16+. Its firmware workbench uses a included WebAssembly build of the separate firmware project.
 
 ```sh
 npm ci
@@ -23,13 +23,25 @@ The test bench also provides service opening, obstruction/timeouts, reboot and r
 
 With a dev server running, use `npm run test:emulator` to verify the interactive preview in Chromium.
 
+## Production firmware simulation
+
+```sh
+npm run simulate
+```
+
+This opens `/simulation.html`: an animated bolt/servo/cable cutaway, live GPIO and debounce readings, NVS ownership and pending intent, an event trace, and the phone app connected to the **production C++ controller running as WebAssembly**. The mobile emulator above remains a lightweight JavaScript demo.
+
+Setup and service presets physically hold the simulated button through the real firmware timing. Try jams, switch wiring faults, failed storage writes, corrupt records and power cuts. State is retained in browser storage across reloads; **Reset saved simulation** clears it. The normal real-device app does not store tokens; this explicitly selected workbench stores its synthetic assignment record.
+
+The compiled module is included, so Zig is needed only to rebuild after firmware changes. `npm run firmware:check` verifies source and artifact hashes; `npm run firmware:build` rebuilds using Zig on your PATH. See [`../firmware/simulation/README.md`](../firmware/simulation/README.md) for exact coverage, assumptions, instructions and limitations. With the server running, `npm run test:simulation` verifies the workbench in Chromium.
+
 Use Android Chrome over **HTTPS trusted by the phone** for BLE and camera operation. The localhost development exception applies only on the computer running the server; HTTP on a LAN IP is insufficient. Build static hosting files with `npm run build`, then serve `dist/` over HTTPS. See [Chrome Web Bluetooth](https://developer.chrome.com/docs/capabilities/bluetooth).
 
 - **Connect tag** opens the browser's device selector from a click gesture, filters by the firmware service UUID, subscribes to status and reads the current state.
 - **Scan to lock/unlock** uses `@zxing/browser` and a rear-facing camera preference. Valid QR content is exactly 16 hexadecimal characters. Tokens normalize to uppercase.
 - **Close for storage** closes a confirmed open/unassigned tag. The physical 3-second service button hold reopens it.
 - **Find my tag** requests a two-second LED flash.
-- Manual token entry supports camera troubleshooting. Tokens are never saved to local storage or sent to a server.
+- Manual token entry supports camera troubleshooting. Real-device mode never saves tokens to local storage or sends them to a server.
 - The interface waits for a newer sensor-confirmed status before reporting success. Disconnects and a missing confirmation invalidate the connection; commands never retry automatically.
 
 Printable synthetic passes are included in `public/` and linked from the app. `npm run passes` regenerates both QR SVGs and their printable page.
