@@ -15,22 +15,22 @@
     <main class="preview-layout">
       <aside class="preview-panel">
         <span class="simulation-label">SIMULATION · NO HARDWARE</span>
-        <h2>Your test bench</h2>
-        <p class="panel-copy">The phone runs the app with a simulated tag. All changes stay in this page’s memory.</p>
+        <h2>Tag controls</h2>
+        <p class="panel-copy">Connect, scan in the phone, then press Setup.</p>
         <div class="tag-status" aria-live="polite"><span id="virtual-led" aria-hidden="true"></span><div><strong id="virtual-state">Open & ready</strong><small id="virtual-connection">Disconnected</small></div></div>
         <button id="demo-connect" class="button primary">Connect virtual tag</button>
-        <div class="button-pair"><button id="demo-setup" class="button">Start setup · 10s</button><button id="demo-service" class="button">Service open</button></div>
-        <p class="hint">Setup simulates a short button hold. Service open simulates the 3-second hold.</p>
-        <div class="pass-heading"><h3>Demo boarding passes</h3><span>Choose inside the scanner</span></div>
+        <div class="button-pair"><button id="demo-setup" class="button">Setup button</button><button id="demo-service" class="button">Service open</button></div>
+        <p class="hint">Setup: ½-second hold. Service: 3-second hold.</p>
+        <details class="pass-reference"><summary>Demo passes</summary>
         <div class="pass-pair"><div class="demo-pass"><img src="./demo-pass-1.svg" alt="QR for demo pass A" /><strong>Pass A</strong><code>A1B2…0718</code></div><div class="demo-pass"><img src="./demo-pass-2.svg" alt="QR for demo pass B" /><strong>Pass B</strong><code>9A8B…3021</code></div></div>
-        <p class="hint">Start setup, then tap <strong>Scan to lock</strong> in the phone. Choose A. Try unlocking with B to see a rejected pass.</p>
+        <p class="hint">Choose A in the scanner to lock. Release with A; B will be rejected.</p></details>
         <details class="recovery-tools"><summary>Test recovery</summary><label class="obstruction"><input id="obstruction" type="checkbox" /> Obstruct the next movement</label><p class="hint">An obstruction causes a timeout. Clear the checkbox, then use Service open.</p><div class="button-pair"><button id="demo-reboot" class="button">Reboot tag</button><button id="demo-reset" class="button">Reset demo</button></div></details>
-        <p class="emulator-note">This previews screen size and app flows. <a href="./simulation.html">Open the production firmware workbench ↗</a> to run the C++ controller and inspect the mechanism, GPIO and NVS. Real camera, radio and motor behavior still need device testing.</p>
+        <p class="emulator-note"><a href="./simulation.html">Firmware workbench ↗</a><br/>Runs the production C++ controller. This preview uses a JavaScript tag.</p>
       </aside>
       <section class="device-area" aria-label="Mobile app preview">
         <div class="device-toolbar"><label for="device-size">Screen size <select id="device-size"><option value="360,800">Small Android · 360 × 800</option><option value="390,844" selected>Android · 390 × 844</option><option value="412,915">Large Android · 412 × 915</option></select></label><button id="rotate" class="rotate-button" title="Rotate screen" aria-label="Rotate screen">↻</button><span id="viewport-size">390 × 844</span></div>
         <div id="device-stage" class="device-stage"><div id="phone-scale"><div id="phone" class="phone"><iframe id="app-frame" src="./?demo=1" title="Carry app in a simulated phone" width="390" height="844"></iframe></div></div></div>
-        <p class="preview-caption">Scroll and interact inside the phone. <a href="./?demo=1" target="_blank" rel="noopener">Open demo at full size ↗</a></p>
+        <p class="preview-caption"><a href="./?demo=1" target="_blank" rel="noopener">Open demo at full size ↗</a></p>
       </section>
     </main>
     <script type="module" src="/src/emulator.js"></script>

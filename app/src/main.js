@@ -1,34 +1,55 @@
 import { BrowserQRCodeReader } from '@zxing/browser';
-import { TagConnection, errorMessage } from './bluetooth.js';
+import { TagConnection } from './bluetooth.js';
 import { normalizeToken } from './protocol.js';
 import { SimulatedTag } from './simulated-tag.js';
 import { FirmwareTag } from './firmware-tag.js';
+import { LockIntent } from './lock-intent.js';
 import './style.css';
 
 const $ = (id) => document.getElementById(id);
 const demoValue = new URLSearchParams(location.search).get('demo');
 const firmwareMode = demoValue === 'firmware';
 const demoMode = demoValue === '1' || firmwareMode;
-const simulation = firmwareMode ? new FirmwareTag({ onChange: publishDemoStatus }) : demoMode
-  ? new SimulatedTag({ onChange: publishDemoStatus })
-  : null;
+const simulation = firmwareMode ? new FirmwareTag({ onChange: publishDemoStatus })
+  : demoMode ? new SimulatedTag({ onChange: publishDemoStatus }) : null;
+const intent = new LockIntent();
 let busy = false;
+let connecting = false;
+let latest = null;
+let released = false;
+let operation = null;
 let scanSession = 0;
 let controls;
-let setupDeadline = 0;
-let latest = null;
 let demoScanOpcode = null;
-const labels = {
-  OPEN_FREE: ['Open & ready', 'Your tag is unassigned and ready for setup.'],
-  CLOSED_FREE: ['Closed for storage', 'Hold the tag button for 3 seconds to reopen.'],
-  LOCKED_ASSIGNED: ['Locked & assigned', 'Scan the same demo pass to release your tag.'],
-  MOVING: ['Bolt is moving', 'Waiting for the position switch to confirm.'],
-  FAULT: ['Service needed', 'Check the mechanism, then hold the tag button for 3 seconds.'],
-};
+let setupDeadline = 0;
 
-function notice(message, error = false) {
+const errors = {
+  TOKEN_MISMATCH: 'Wrong pass. Scan the pass used to lock this tag.',
+  SETUP_REQUIRED: 'Setup expired. Scan again, then press the tag button.',
+  ASSIGNED: 'This tag is already locked. Use its original pass.',
+  UNASSIGNED: 'No pass is assigned to this tag.',
+  NOT_OPEN: 'Open the tag before locking it.',
+  BUSY: 'Wait for the tag to stop moving.',
+  STORAGE: 'The tag could not save this change. It needs a storage check.',
+  SENSOR_CONFLICT: 'Check the position switches, then hold the tag button for 3 seconds.',
+  TIMEOUT: 'Clear the bolt, then hold the tag button for 3 seconds.',
+  RECOVERY_REQUIRED: 'Clear the bolt, then hold the tag button for 3 seconds.',
+  ACTUATOR: 'The motor could not start. Check your tag.',
+  MALFORMED: 'Pass not recognised. Use a demo QR pass.',
+  UNKNOWN_COMMAND: 'This tag needs a firmware update.',
+};
+function notice(message = '', error = false) {
   $('notice').textContent = message;
+  $('notice').hidden = !message;
   $('notice').classList.toggle('error', error);
+}
+function friendlyError(error, source = 'tag') {
+  if (errors[error.code]) return errors[error.code];
+  if (error.name === 'NotFoundError') return 'No tag selected.';
+  if (error.name === 'NotAllowedError') return source === 'camera' ? 'Allow camera access or enter a token in Tag options.' : 'Allow Bluetooth access to connect your tag.';
+  if (/No confirmed result/.test(error.message)) return 'No response. Reconnect to check your tag.';
+  if (/disconnected|Disconnected/.test(error.message)) return 'Connection lost. Reconnect to continue.';
+  return error.message;
 }
 
 const connection = new TagConnection({
@@ -36,57 +57,97 @@ const connection = new TagConnection({
   onStatus(status) {
     latest = status;
     setupDeadline = performance.now() + status.setupMs;
-    const [title, detail] = labels[status.state];
-    $('state-label').textContent = title;
-    $('state-detail').textContent = detail;
-    $('state-dot').className = `state-dot ${status.state === 'FAULT' ? 'fault' : status.state === 'MOVING' ? 'busy' : 'good'}`;
-    if (status.error !== 'NONE') notice(errorMessage(status.error), true);
-    else if (status.command === 'S' && status.state === 'OPEN_FREE') notice('Service opening confirmed. Assignment cleared; ready to reuse.');
-    else if (status.command === 'S' && status.state === 'MOVING') notice('Service opening requested. Waiting for confirmed release…');
+    if (status.state !== 'OPEN_FREE') released = false;
+    if (status.state === 'OPEN_FREE' && status.error === 'NONE' && ['U', 'S'].includes(status.command)) released = true;
+    if (status.error !== 'NONE' && status.state !== 'FAULT') notice(errors[status.error] || 'Try again.', true);
+    if (status.state === 'FAULT' || (status.command === 'S' && status.error === 'NONE')) notice();
+    consumeIntent();
     render();
   },
-  onConnection(connected, message) {
+  onConnection(connected, name) {
     $('connection-pill').textContent = connected ? 'Connected' : 'Disconnected';
-    $('connection-pill').classList.toggle('connected', connected);
-    $('device-name').textContent = connected ? message : 'Let’s find your tag';
-    $('connection-copy').textContent = connected ? (simulation ? 'Virtual tag connected. No hardware is in use.' : 'Your tag is connected over Bluetooth.') : (simulation ? 'Connect the virtual tag to try this demo.' : 'Keep your tag powered on and nearby.');
-    $('connect').hidden = connected;
-    $('disconnect').hidden = !connected;
+    $('device-name').textContent = connected ? name : '';
     if (!connected) {
       latest = null;
+      released = false;
       setupDeadline = 0;
+      intent.clear();
       stopScanner();
-      $('state-label').textContent = 'Waiting for connection';
-      $('state-detail').textContent = 'Connect to read the current tag state.';
-      $('state-dot').className = 'state-dot';
-    }
-    notice(connected ? 'Connected. Your tag’s confirmed state is shown above.' : message);
+      if (name.startsWith('Tag disconnected')) notice('Connection lost. Reconnect to continue.', true);
+    } else notice();
     if (simulation) publishDemoStatus(simulation.snapshot());
     render();
   },
 });
 
 function render() {
-  const active = connection.connected && latest && !busy && latest.state !== 'MOVING';
-  const setupMs = Math.max(0, setupDeadline - performance.now());
-  $('setup-time').textContent = setupMs > 0 ? `${Math.ceil(setupMs / 1000)} seconds` : 'Inactive';
-  const canLock = active && latest.state === 'OPEN_FREE' && setupMs > 0;
-  const canUnlock = active && latest.state === 'LOCKED_ASSIGNED';
-  $('lock').disabled = $('manual-lock').disabled = !canLock;
-  $('unlock').disabled = $('manual-unlock').disabled = !canUnlock;
-  $('storage').disabled = !(active && latest.state === 'OPEN_FREE');
-  $('flash').disabled = !active;
+  const connected = connection.connected && Boolean(latest);
+  if (intent.expired(performance.now())) { intent.clear(); notice('Scan timed out. Scan your pass again.', true); }
+  const state = connected ? latest.state : null;
+  const waiting = connected && intent.pending;
+  const moving = state === 'MOVING';
+  const canAct = connected && !busy && !moving && !waiting;
+  let title = 'Connect your tag';
+  let detail = 'Switch it on and keep it nearby.';
+  let icon = 'connect';
+  if (connecting) { title = 'Connecting…'; detail = 'Choose your tag in the Bluetooth list.'; }
+  else if (waiting) { title = 'Press the tag button'; detail = 'Hold for ½ second, then release. Your pass is scanned.'; icon = 'button'; }
+  else if (state === 'OPEN_FREE') { title = released ? 'Bag released' : 'Lock your bag'; detail = released ? 'You can remove the cable.' : 'Insert the cable, then scan your pass.'; icon = released ? 'released' : 'bag'; }
+  else if (state === 'LOCKED_ASSIGNED') { title = 'Bag locked'; detail = 'Scan the same pass to release.'; icon = 'locked'; }
+  else if (state === 'CLOSED_FREE') { title = 'Tag stored'; detail = 'Hold the tag button for 3 seconds to open.'; icon = 'button'; }
+  else if (moving) { title = (operation || latest.command) === 'L' ? 'Locking…' : (operation || latest.command) === 'C' ? 'Closing…' : 'Releasing…'; detail = 'Wait for the tag to finish.'; icon = 'moving'; }
+  else if (state === 'FAULT') { title = 'Check your tag'; detail = errors[latest.error] || errors.RECOVERY_REQUIRED; icon = 'fault'; }
+  $('state-label').textContent = title;
+  $('state-detail').textContent = detail;
+  $('status-symbol').setAttribute('href', `#icon-${icon}`);
+  $('state-icon').className = `state-icon ${icon === 'fault' ? 'fault' : icon === 'moving' ? 'moving' : ''}`;
+  $('device-row').hidden = !connected;
+  $('connect').hidden = connected;
+  $('connect').disabled = connecting;
+  $('connect').textContent = connecting ? 'Connecting…' : 'Connect tag';
+  $('lock').hidden = state !== 'OPEN_FREE' || waiting || moving;
+  $('unlock').hidden = state !== 'LOCKED_ASSIGNED' || moving;
+  $('lock').disabled = $('manual-lock').disabled = !(canAct && state === 'OPEN_FREE');
+  $('unlock').disabled = $('manual-unlock').disabled = !(canAct && state === 'LOCKED_ASSIGNED');
+  $('lock').textContent = released ? 'Lock again' : 'Scan to lock';
+  $('waiting').hidden = !waiting && !moving;
+  $('waiting').textContent = moving ? 'Please wait…' : 'Waiting for tag button…';
+  $('cancel-lock').hidden = !waiting;
+  $('disconnect').hidden = !connected;
+  $('storage').hidden = state !== 'OPEN_FREE';
+  $('storage').disabled = !(canAct && state === 'OPEN_FREE');
+  $('flash').disabled = !canAct;
+  $('manual-lock').hidden = state !== 'OPEN_FREE';
+  $('manual-unlock').hidden = state !== 'LOCKED_ASSIGNED';
+  const remaining = Math.max(0, setupDeadline - performance.now());
+  $('setup-line').hidden = !(state === 'OPEN_FREE' && remaining > 0 && !waiting && !busy);
+  $('setup-time').textContent = `${Math.ceil(remaining / 1000)}s`;
 }
 
-async function run(opcode, token) {
-  busy = true;
+function consumeIntent() {
+  if (!intent.pending || !connection.connected || busy) return;
+  const token = intent.take(latest, Math.max(0, setupDeadline - performance.now()), performance.now());
+  if (token) void run('L', token);
+}
+function queueLock(token) {
+  if (!connection.connected || latest?.state !== 'OPEN_FREE' || busy) { notice('Tag state changed. Reconnect or try again.', true); return; }
+  intent.queue(token, performance.now());
+  notice();
+  consumeIntent();
   render();
-  notice(opcode === 'F' ? 'Asking your tag to flash…' : 'Waiting for confirmed bolt position…');
+}
+async function run(opcode, token) {
+  intent.clear();
+  busy = true;
+  operation = opcode;
+  notice();
+  render();
   try {
     await connection.send(opcode, token);
-    notice({ L: 'Locked. This pass is now assigned to your tag.', U: 'Open confirmed. Assignment cleared; ready to reuse.', C: 'Closed for storage. Hold the tag button for 3 seconds to reopen.', F: 'Your tag is flashing.' }[opcode]);
-  } catch (error) { notice(error.message, true); }
-  finally { $('token').value = ''; busy = false; render(); }
+    if (opcode === 'F') notice('Tag is flashing.');
+  } catch (error) {
+    if (latest?.state !== 'FAULT') notice(friendlyError(error), true);
+  } finally { $('token').value = ''; busy = false; operation = null; render(); }
 }
 
 function stopScanner() {
@@ -94,47 +155,41 @@ function stopScanner() {
   demoScanOpcode = null;
   controls?.stop();
   controls = undefined;
-  const stream = $('video').srcObject;
-  stream?.getTracks().forEach((track) => track.stop());
+  $('video').srcObject?.getTracks().forEach((track) => track.stop());
   $('video').srcObject = null;
   if ($('scanner').open) $('scanner').close();
 }
-
+function handleScan(opcode, token) {
+  if (opcode === 'L') queueLock(token);
+  else void run(opcode, token);
+}
 async function scan(opcode) {
   if (!simulation && (!globalThis.isSecureContext || !navigator.mediaDevices?.getUserMedia)) {
-    notice('Camera scanning needs HTTPS and camera permission. You can also enter a demo token manually.', true);
-    return;
+    notice('Camera unavailable. Enter a demo token in Tag options.', true); return;
   }
+  intent.clear();
   stopScanner();
   const session = scanSession;
-  $('scanner-title').textContent = opcode === 'L' ? 'Scan to lock' : 'Scan to unlock';
-  $('scan-message').textContent = 'Place the demo QR inside the frame.';
+  notice();
+  $('scanner-purpose').textContent = opcode === 'L' ? 'To lock your bag' : 'To release your bag';
+  $('scan-message').textContent = simulation ? 'Choose a demo pass.' : 'Point the camera at your demo QR pass.';
   $('scanner').showModal();
-  if (simulation) {
-    demoScanOpcode = opcode;
-    $('scan-message').textContent = 'Choose a synthetic pass to simulate scanning its QR.';
-    return;
-  }
+  if (simulation) { demoScanOpcode = opcode; return; }
   try {
-    const reader = new BrowserQRCodeReader();
-    const started = await reader.decodeFromConstraints({ audio: false, video: { facingMode: { ideal: 'environment' } } }, $('video'), (result, error, currentControls) => {
+    const started = await new BrowserQRCodeReader().decodeFromConstraints({ audio: false, video: { facingMode: { ideal: 'environment' } } }, $('video'), (result, error, currentControls) => {
       if (session !== scanSession) { currentControls.stop(); return; }
       if (!result) return;
       let token;
       try { token = normalizeToken(result.getText()); }
-      catch (validationError) { $('scan-message').textContent = validationError.message; return; }
-      currentControls.stop();
-      stopScanner();
-      void run(opcode, token);
+      catch { $('scan-message').textContent = 'Use a demo QR pass.'; return; }
+      currentControls.stop(); stopScanner(); handleScan(opcode, token);
     });
     if (session !== scanSession) started.stop(); else controls = started;
   } catch (error) {
     if (session !== scanSession) return;
-    stopScanner();
-    notice(`Camera unavailable: ${error.message}. Use manual token entry if needed.`, true);
+    stopScanner(); notice(friendlyError(error, 'camera'), true);
   }
 }
-
 async function chooseDemoPass(index) {
   const opcode = demoScanOpcode;
   const session = scanSession;
@@ -145,55 +200,53 @@ async function chooseDemoPass(index) {
     const result = await new BrowserQRCodeReader().decodeFromImageUrl(new URL(`./demo-pass-${index}.svg`, location.href).href);
     if (session !== scanSession) return;
     const token = normalizeToken(result.getText());
-    stopScanner();
-    await run(opcode, token);
-  } catch (error) {
-    if (session === scanSession) $('scan-message').textContent = error.message;
-  } finally { buttons.forEach((button) => { button.disabled = false; }); }
+    stopScanner(); handleScan(opcode, token);
+  } catch { if (session === scanSession) $('scan-message').textContent = 'Could not read this pass. Try again.'; }
+  finally { buttons.forEach((button) => { button.disabled = false; }); }
 }
-
 function publishDemoStatus(status) {
   if (window.parent !== window) window.parent.postMessage({ type: 'carry-demo-status', status }, location.origin);
 }
 
 $('connect').addEventListener('click', async () => {
-  $('connect').disabled = true;
-  notice('Choose your nearby Carry tag…');
+  connecting = true; notice(); render();
   try { await connection.connect(); }
-  catch (error) { notice(error.message, true); }
-  finally { $('connect').disabled = false; }
+  catch (error) { notice(friendlyError(error), true); }
+  finally { connecting = false; render(); }
 });
-$('disconnect').addEventListener('click', () => connection.disconnect());
+$('help').addEventListener('click', () => $('help-dialog').showModal());
+$('options').addEventListener('click', () => $('tag-options').showModal());
+$('disconnect').addEventListener('click', () => { $('tag-options').close(); connection.disconnect(); notice(); });
 $('lock').addEventListener('click', () => scan('L'));
 $('unlock').addEventListener('click', () => scan('U'));
-$('storage').addEventListener('click', () => run('C'));
-$('flash').addEventListener('click', () => run('F'));
+$('storage').addEventListener('click', () => { $('tag-options').close(); void run('C'); });
+$('flash').addEventListener('click', () => { $('tag-options').close(); void run('F'); });
+$('cancel-lock').addEventListener('click', () => { intent.clear(); notice(); render(); });
 $('cancel-scan').addEventListener('click', stopScanner);
 $('scanner').addEventListener('cancel', (event) => { event.preventDefault(); stopScanner(); });
 $('manual-form').addEventListener('submit', (event) => {
   event.preventDefault();
   const opcode = event.submitter?.value;
   if (!['L', 'U'].includes(opcode) || event.submitter.disabled) return;
-  try { void run(opcode, normalizeToken($('token').value)); }
-  catch (error) { notice(error.message, true); }
+  try {
+    const token = normalizeToken($('token').value);
+    $('token').value = ''; $('tag-options').close(); handleScan(opcode, token);
+  } catch { notice('Enter a 16-character demo token.', true); }
 });
-document.addEventListener('visibilitychange', () => { if (document.hidden) stopScanner(); });
-window.addEventListener('pagehide', () => { stopScanner(); connection.disconnect(); simulation?.dispose(); });
+document.addEventListener('visibilitychange', () => { if (document.hidden) { stopScanner(); intent.clear(); render(); } });
+window.addEventListener('pagehide', () => { intent.clear(); stopScanner(); connection.disconnect(); simulation?.dispose(); });
 setInterval(render, 200);
+
 if (simulation) {
+  document.body.dataset.demo = firmwareMode ? 'firmware' : 'demo';
   document.querySelector('.brand').href = firmwareMode ? './?demo=firmware' : './?demo=1';
-  const banner = document.createElement('div');
-  banner.className = 'demo-banner';
-  banner.innerHTML = '<strong>Demo mode · Virtual tag</strong><span>No real Bluetooth or motor</span><div><button id="quick-setup">Start setup</button><button id="quick-service">Service open</button></div>';
-  if (firmwareMode) banner.innerHTML = '<strong>Production firmware · Simulated hardware</strong><span>C++ controller running in WebAssembly</span><div><button id="quick-setup">Hold for setup · 650 ms</button><button id="quick-service">Hold for service · 3.2 s</button></div>';
-  document.body.prepend(banner);
-  $('quick-setup').addEventListener('click', () => simulation.setup());
-  $('quick-service').addEventListener('click', () => simulation.service());
+  $('demo-label').hidden = false;
+  $('demo-tools').hidden = window.parent !== window;
+  $('quick-setup').addEventListener('click', () => { $('tag-options').close(); simulation.setup(); });
+  $('quick-service').addEventListener('click', () => { $('tag-options').close(); simulation.service(); });
   $('camera-frame').hidden = true;
   $('demo-scanner').hidden = false;
-  document.querySelectorAll('[data-demo-pass]').forEach((button) => {
-    button.addEventListener('click', () => chooseDemoPass(Number(button.dataset.demoPass)));
-  });
+  document.querySelectorAll('[data-demo-pass]').forEach((button) => button.addEventListener('click', () => chooseDemoPass(Number(button.dataset.demoPass))));
   window.addEventListener('message', (event) => {
     if (event.origin !== location.origin || event.source !== window.parent || event.data?.type !== 'carry-demo-action') return;
     const { action, value } = event.data;
@@ -218,7 +271,7 @@ if (simulation) {
     publishDemoStatus(simulation.snapshot());
   });
   publishDemoStatus(simulation.snapshot());
-  notice('Demo mode: connect the virtual tag, start setup, then scan a demo pass.');
-  simulation.ready?.catch((error) => notice(`Firmware simulation could not start: ${error.message}`, true));
-} else if (!globalThis.isSecureContext) notice('Open this app over HTTPS on Android Chrome to enable Bluetooth and the camera.', true);
-else if (!navigator.bluetooth) notice('Web Bluetooth is unavailable in this browser. Open this app in Android Chrome.', true);
+  simulation.ready?.catch((error) => notice(`Simulation could not start: ${error.message}`, true));
+} else if (!globalThis.isSecureContext) notice('Open this app over HTTPS to connect your tag.', true);
+else if (!navigator.bluetooth) notice('Use Android Chrome to connect your tag.', true);
+render();

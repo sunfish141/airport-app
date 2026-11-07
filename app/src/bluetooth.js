@@ -54,7 +54,11 @@ export class TagConnection {
       return this.settle(new Error('Service opening interrupted this command. Check the confirmed tag state.'));
     }
     if (status.command !== pending.opcode) return;
-    if (status.error !== 'NONE') return this.settle(new Error(errorMessage(status.error)));
+    if (status.error !== 'NONE') {
+      const error = new Error(errorMessage(status.error));
+      error.code = status.error;
+      return this.settle(error);
+    }
     const target = { L: 'LOCKED_ASSIGNED', U: 'OPEN_FREE', C: 'CLOSED_FREE' }[pending.opcode];
     if (pending.opcode === 'F' || status.state === target) this.settle(null, status);
   }

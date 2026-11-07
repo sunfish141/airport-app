@@ -11,7 +11,7 @@ import subprocess
 root = Path(__file__).resolve().parents[1]
 sources = ["firmware/src/Controller.cpp", "firmware/include/Controller.h",
            "firmware/include/Config.h", "firmware/simulation/Simulator.cpp",
-           "tools/build-firmware-wasm.py"]
+           "tools/build-firmware-wasm.py", "firmware/include/BoardConfig.h"]
 compiler = shlex.split(os.environ.get("WASM_CXX", "zig c++"))
 if not shutil.which(compiler[0]):
     raise SystemExit("Install Zig 0.14.1+ and put zig on PATH, or set WASM_CXX='/path/to/zig c++'. See firmware/simulation/README.md.")

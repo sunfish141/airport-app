@@ -5,10 +5,11 @@
     "firmware/include/Controller.h",
     "firmware/include/Config.h",
     "firmware/simulation/Simulator.cpp",
-    "tools/build-firmware-wasm.py"
+    "tools/build-firmware-wasm.py",
+    "firmware/include/BoardConfig.h"
   ],
-  "sourceHash": "626835f2f345f99e54882109bb4677e6dc64938d3d5f7b9de2d22f1a6f4f30a4",
-  "wasmHash": "6c0904b682f46dd2226e2ce0a652fdf933f7f0623cd46b3d8b8c33b38487b177",
+  "sourceHash": "df29f269400791371eb20fc87decc8dc358b897005ad31c0258ed7a2ebe93675",
+  "wasmHash": "a09c36777c97c1a3c7d6be4b8d152ba47119f8c264919f2d8118d0481cfeb304",
   "compiler": "Zig 0.14.1 C++",
   "target": "wasm32-wasi",
   "controllerSource": "Controller.cpp.txt"

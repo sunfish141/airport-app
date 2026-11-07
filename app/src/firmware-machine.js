@@ -54,6 +54,8 @@ export class FirmwareMachine {
         debounceMs: this.exports.sim_config(0), setupHoldMs: this.exports.sim_config(1), serviceHoldMs: this.exports.sim_config(2),
         setupWindowMs: this.exports.sim_config(3), timeoutMs: this.exports.sim_config(4),
         openPulseUs: this.exports.sim_config(5), closedPulseUs: this.exports.sim_config(6),
+        servoPin: this.exports.sim_config(7), openPin: this.exports.sim_config(8), closedPin: this.exports.sim_config(9),
+        buttonPin: this.exports.sim_config(10), ledPin: this.exports.sim_config(11), servoHz: this.exports.sim_config(12),
       },
     };
   }
@@ -73,20 +75,20 @@ export class FirmwareMachine {
   }
 }
 
-export function describeTrace(event) {
+export function describeTrace(event, constants) {
   const direction = ['None', 'Open', 'Close'];
   const flags = (n) => `open=${n & 1 ? 'LOW' : 'HIGH'}, closed=${n & 2 ? 'LOW' : 'HIGH'}, button=${n & 4 ? 'LOW' : 'HIGH'}`;
   return {
     0: ['Boot: PWM off; debounce inputs before NVS reconciliation', 'main.cpp → setup'],
     1: [`NVS committed: ${event.a & 1 ? 'assigned' : 'free'}, pending ${direction[event.b]}, fault=${Boolean(event.a & 2)}`, 'Controller → Hardware::save'],
     2: ['NVS write failed; previous blob unchanged', 'Hardware::save → false'],
-    3: [`PWM enabled: ${event.a} µs at 50 Hz; target ${direction[event.b]}`, 'Controller::move → Hardware::drive'],
+    3: [`PWM enabled: ${event.a} µs${constants ? ` at ${constants.servoHz} Hz` : ''}; target ${direction[event.b]}`, 'Controller::move → Hardware::drive'],
     4: ['PWM detached', 'Hardware::stop'],
     5: [`Status: ${STATES[event.a]} · ${ERRORS[event.b]}`, 'Hardware::publish → encodeStatus'],
     6: [`Raw GPIO: ${flags(event.a)}`, 'Simulated microswitch contacts'],
     7: [`Debounced: ${flags(event.a)}`, 'Production DebouncedInput::update'],
-    8: [`Physical button ${event.a ? 'pressed' : 'released'}`, 'Simulated GPIO7'],
-    9: [`Main power ${event.a ? 'ON' : 'OFF'}`, 'Simulated battery switch'],
+    8: [`Physical button ${event.a ? 'pressed' : 'released'}`, constants ? `Simulated GPIO${constants.buttonPin}` : 'Simulated button input'],
+    9: [`Main power ${event.a ? 'ON' : 'OFF'}`, 'Simulated supply switch'],
     10: [`Command ${event.a ? String.fromCharCode(event.a) : '(empty)'} · ${event.b} bytes`, 'Queue → Controller::command'],
     11: ['Command queue overflow', 'Controller::rejectBusy'],
     12: [event.a === 2 ? 'Cable held by bolt; removal blocked by geometry' : `Cable eyelet ${event.a ? 'inserted' : 'removed'}`, 'Illustrative mechanical model'],

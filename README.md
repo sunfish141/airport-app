@@ -6,7 +6,7 @@ The projects are independent:
 | Directory | Purpose |
 | --- | --- |
 | [`app/`](app/) | Plain JavaScript/Vite phone interface, Web Bluetooth, ZXing QR scanning, printable synthetic passes |
-| [`firmware/`](firmware/) | Arduino firmware for XIAO ESP32C3, NimBLE GATT, servo control, endpoint switches and atomic NVS state |
+| [`firmware/`](firmware/) | Arduino firmware for the purchased ESP-WROOM-32 board, NimBLE GATT, servo control, endpoint switches and atomic NVS state |
 | [`docs/protocol.md`](docs/protocol.md) | Shared command/status wire format |
 
 ## App
@@ -38,16 +38,16 @@ pio run -d firmware
 pio run -d firmware --target upload
 ```
 
-The pinned environment selects `seeed_xiao_esp32c3`, Espressif32 6.10.0 / Arduino ESP32 2.0.17, and NimBLE-Arduino 2.3.6. [`firmware/README.md`](firmware/README.md) describes pin configuration, calibration, controls and recovery. Servo travel and timeout must be calibrated on the actual mechanism before normal use.
+The pinned `esp32_wroom32` environment selects the generic classic ESP32 `esp32dev` profile for the purchased 30-pin board, Espressif32 6.10.0 / Arduino ESP32 2.0.17, and NimBLE-Arduino 2.3.6. [`firmware/README.md`](firmware/README.md) describes the new GPIO map in `BoardConfig.h`, SG90 calibration, LM2596 power requirements, controls and recovery. The original build guide describes older XIAO/boost hardware; use the firmware README for the purchased parts. Endpoint contacts and an external LED are still needed for those functions, and NFC is not in the purchase list. Servo travel and timeout must be calibrated on the actual mechanism before normal use.
 
 ## Demonstration
 
 1. Start with the bolt open and only its open switch active. Power the tag and connect the app to `Carry-XXXXXX`.
-2. Hold the tag button for at least 500 ms, then release before 3 seconds. This opens a 10-second setup window.
-3. Tap **Scan to lock** and scan pass A (`A1B2C3D4E5F60718`). The firmware stores its token and closing intent before driving the servo. The app reports locked only after the closed switch confirms.
-4. Tap **Scan to unlock** and scan pass B (`9A8B7C6D5E4F3021`). It is rejected and the assignment remains.
-5. Scan A to unlock. Ownership clears only after the open switch confirms. Start setup and assign B to check reuse; A must then fail to unlock.
-6. From open/unassigned, use **Close for storage**. Hold the physical button for 3 seconds to reopen without scanning.
+2. Tap **Scan to lock** and scan pass A (`A1B2C3D4E5F60718`).
+3. When prompted, hold the tag button for at least 500 ms, then release before 3 seconds. This opens a 10-second setup window; the app sends the scanned token once. The firmware stores its token and closing intent before driving the servo. The app reports locked only after the closed switch confirms.
+4. Tap **Scan to release** and scan pass B (`9A8B7C6D5E4F3021`). It is rejected and the assignment remains.
+5. Scan A to unlock. Ownership clears only after the open switch confirms. Scan B and press the setup button to check reuse; A must then fail to unlock.
+6. From open/unassigned, open **Tag options** (···) and use **Close for storage**. Hold the physical button for 3 seconds to reopen without scanning.
 
 A 3-second physical hold requests service opening from any state, once per press. A fault or interrupted movement never retries automatically. Both endpoint switches active prevents recovery movement until corrected. Tokens are replayable demo identifiers, and the service button bypasses ownership, as specified in the guide.
 

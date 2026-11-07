@@ -1,6 +1,7 @@
 app/node_modules/
 app/dist/
 firmware/.pio/
+firmware/compile_commands.json
 __pycache__/
 .venv/
 .DS_Store

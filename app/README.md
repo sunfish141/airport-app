@@ -1,6 +1,6 @@
 # Phone app
 
-Plain JavaScript/Vite app. Requires Node.js 22.16+. Its firmware workbench uses a included WebAssembly build of the separate firmware project.
+Plain JavaScript/Vite app. Requires Node.js 22.16+. Its firmware workbench uses an included WebAssembly build of the separate firmware project.
 
 ```sh
 npm ci
@@ -17,7 +17,7 @@ npm run emulator
 
 This starts a local server and opens `/emulator.html` on its printed URL, normally **http://127.0.0.1:5173/emulator.html**. If the server is already running with `npm run dev`, open `/emulator.html` on that server’s URL. When using VS Code through WSL or SSH, use the forwarded port URL if localhost does not reach the server.
 
-The preview embeds the actual app at selectable Android screen sizes, with rotation and a virtual tag. Click **Connect virtual tag**, then **Start setup**. In the phone, tap **Scan to lock** and choose pass A. Try unlocking with B for a mismatch, then with A for a successful release. The scanner decodes the included QR image without requesting a camera.
+The preview embeds the actual app at selectable Android screen sizes, with rotation and a virtual tag. Click **Connect virtual tag**. In the phone, tap **Scan to lock** and choose pass A, then click **Setup button** when prompted. Try unlocking with B for a mismatch, then with A for a successful release. The scanner decodes the included QR image without requesting a camera.
 
 The test bench also provides service opening, obstruction/timeouts, reboot and reset. A reboot retains the simulated assignment; a reset clears the virtual tag. Everything stays in memory. `/emulator.html` and the opt-in demo URL `/?demo=1` are included in the static build. The normal `/` app continues to use real Web Bluetooth. This is a browser viewport and tag simulator, not an Android OS emulator; physical Bluetooth, camera permissions and the firmware still require device testing.
 
@@ -38,9 +38,11 @@ The compiled module is included, so Zig is needed only to rebuild after firmware
 Use Android Chrome over **HTTPS trusted by the phone** for BLE and camera operation. The localhost development exception applies only on the computer running the server; HTTP on a LAN IP is insufficient. Build static hosting files with `npm run build`, then serve `dist/` over HTTPS. See [Chrome Web Bluetooth](https://developer.chrome.com/docs/capabilities/bluetooth).
 
 - **Connect tag** opens the browser's device selector from a click gesture, filters by the firmware service UUID, subscribes to status and reads the current state.
-- **Scan to lock/unlock** uses `@zxing/browser` and a rear-facing camera preference. Valid QR content is exactly 16 hexadecimal characters. Tokens normalize to uppercase.
-- **Close for storage** closes a confirmed open/unassigned tag. The physical 3-second service button hold reopens it.
-- **Find my tag** requests a two-second LED flash.
+- **Scan to lock/release** uses `@zxing/browser` and a rear-facing camera preference. Valid QR content is exactly 16 hexadecimal characters. Tokens normalize to uppercase.
+- **Tag options** (···) contains storage, finding the tag, disconnect and manual token entry. **Close for storage** closes a confirmed open/unassigned tag. The physical 3-second service button hold reopens it.
+- **Find tag** requests a two-second LED flash.
+- Setup is **connect → scan → hold the tag button for ½ second and release**. Scanning first keeps camera permission outside the firmware’s 10-second setup window. The app keeps that scan only in memory for up to 30 seconds, clears it on cancel, disconnect or backgrounding, and sends one lock command only after the firmware reports an active setup window.
+- Release requires one scan of the same pass. There is no account, onboarding form or extra confirmation screen.
 - Manual token entry supports camera troubleshooting. Real-device mode never saves tokens to local storage or sends them to a server.
 - The interface waits for a newer sensor-confirmed status before reporting success. Disconnects and a missing confirmation invalidate the connection; commands never retry automatically.
 

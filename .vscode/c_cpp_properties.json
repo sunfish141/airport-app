@@ -1,0 +1,9 @@
+{
+  "configurations": [
+    {
+      "name": "ESP-WROOM-32",
+      "compileCommands": "${workspaceFolder}/firmware/compile_commands.json"
+    }
+  ],
+  "version": 4
+}

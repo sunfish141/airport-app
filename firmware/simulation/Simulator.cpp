@@ -1,6 +1,7 @@
 // Host hardware adapter. Controller.cpp, Controller.h and Config.h are compiled
 // unchanged alongside this file. No Arduino/NimBLE/ESP32 CPU is emulated here.
 #include "Controller.h"
+#include "BoardConfig.h"
 #include <new>
 #include <cstring>
 
@@ -46,7 +47,7 @@ class SimHardware : public tag::Hardware {
   bool drive(tag::Pending direction) override {
     pwm = true;
     target = direction == tag::Pending::Open ? 0.0f : 1.0f;
-    pulseUs = direction == tag::Pending::Open ? config::OPEN_PULSE_US : config::CLOSED_PULSE_US;
+    pulseUs = direction == tag::Pending::Open ? boardconfig::OPEN_PULSE_US : boardconfig::CLOSED_PULSE_US;
     trace(3, pulseUs, uint32_t(direction));
     return true;
   }
@@ -229,8 +230,14 @@ int sim_config(int key) {
     case 2: return config::SERVICE_HOLD_MS;
     case 3: return config::SETUP_WINDOW_MS;
     case 4: return config::MOVEMENT_TIMEOUT_MS;
-    case 5: return config::OPEN_PULSE_US;
-    case 6: return config::CLOSED_PULSE_US;
+    case 5: return boardconfig::OPEN_PULSE_US;
+    case 6: return boardconfig::CLOSED_PULSE_US;
+    case 7: return boardconfig::SERVO_PIN;
+    case 8: return boardconfig::OPEN_PIN;
+    case 9: return boardconfig::CLOSED_PIN;
+    case 10: return boardconfig::BUTTON_PIN;
+    case 11: return boardconfig::LED_PIN;
+    case 12: return boardconfig::SERVO_HZ;
     default: return 0;
   }
 }

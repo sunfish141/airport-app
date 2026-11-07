@@ -15,7 +15,7 @@ function renderTrace(events = []) {
   if (key === lastTrace) return;
   lastTrace = key;
   const nodes = filtered.slice().reverse().map((event) => {
-    const [message, source] = describeTrace(event);
+    const [message, source] = describeTrace(event, current?.constants);
     const item = document.createElement('li');
     const time = document.createElement('time');
     time.textContent = `${(event.ms / 1000).toFixed(3)}s`;
@@ -50,6 +50,12 @@ function render(s) {
   setText('pause-sim', s.paused ? 'Resume' : 'Pause');
   $('step-sim').disabled = !s.paused;
   if (s.position === undefined) return;
+  setText('diagram-open-label', `OPEN · GPIO${s.constants.openPin}`);
+  setText('diagram-closed-label', `CLOSED · GPIO${s.constants.closedPin}`);
+  setText('servo-pin-label', `Servo output · GPIO${s.constants.servoPin}`);
+  setText('open-pin-label', `Open switch · GPIO${s.constants.openPin}`);
+  setText('closed-pin-label', `Closed switch · GPIO${s.constants.closedPin}`);
+  setText('diagram-led-label', `EXT LED · GPIO${s.constants.ledPin}`);
   const enabled = s.ready && s.powered;
   for (const id of ['physical-button', 'setup-hold', 'service-hold', 'reboot-tag', 'connect-firmware']) $(id).disabled = !enabled;
   $('main-power').disabled = false;
@@ -74,7 +80,7 @@ function render(s) {
   $('pwm-wire').setAttribute('opacity', s.pwm ? '1' : '.2');
   setText('position-value', `${Math.round(s.position * 100)}%`);
   setText('pwm-value', s.pwm ? `${s.pulseUs} µs` : 'Detached');
-  setText('pwm-detail', s.pwm ? `50 Hz · target ${s.pending.toLowerCase()}` : 'PWM off ≠ guaranteed motor cutoff');
+  setText('pwm-detail', s.pwm ? `${s.constants.servoHz} Hz · target ${s.pending.toLowerCase()}` : 'PWM off ≠ guaranteed motor cutoff');
   setText('open-value', !s.powered ? 'Unpowered' : s.rawOpen ? 'LOW · active' : 'HIGH · released');
   setText('closed-value', !s.powered ? 'Unpowered' : s.rawClosed ? 'LOW · active' : 'HIGH · released');
   setText('open-stable', `Debounced: ${s.open ? 'active' : 'released'} · ${s.constants.debounceMs} ms`);
@@ -89,7 +95,7 @@ function render(s) {
   $('toggle-cable').disabled = s.position > .15;
   setText('toggle-cable', s.cable ? 'Remove cable eyelet' : 'Insert cable eyelet');
   $('physical-button').classList.toggle('held', s.button);
-  setText('button-reading', `GPIO7 · ${s.button ? `pressed ${s.buttonHeldMs} ms · LOW` : 'released · HIGH'} · debounced ${s.buttonDebounced ? 'pressed' : 'released'}`);
+  setText('button-reading', `GPIO${s.constants.buttonPin} · ${s.button ? `pressed ${s.buttonHeldMs} ms · LOW` : 'released · HIGH'} · debounced ${s.buttonDebounced ? 'pressed' : 'released'}`);
   const [title, copy] = explain(s);
   setText('phase-title', title);
   setText('phase-copy', copy);

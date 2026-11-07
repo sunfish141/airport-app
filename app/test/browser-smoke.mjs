@@ -59,6 +59,7 @@ try {
     window.tagTest = {
       writes, pass: 1, cameraStops: 0,
       setup: () => emit({ setupMs: 10000, command: '-', error: 0 }),
+      expireSetup: () => emit({ setupMs: 0, command: '-', error: 0 }),
       service: () => { assignedToken = ''; emit({ state: 0, flags: 2, error: 0, command: 'S' }); },
     };
     navigator.mediaDevices.getUserMedia = async () => {
@@ -76,46 +77,71 @@ try {
     };
   });
   await page.goto(`${baseURL}/`, { waitUntil: 'networkidle' });
+  const state = (text) => page.locator('#state-label').getByText(text, { exact: true }).waitFor();
+  const options = () => page.locator('#options').click();
+  const manual = async (token, opcode) => {
+    await options();
+    await page.locator('#manual-entry').evaluate((element) => { element.open = true; });
+    await page.locator('#token').fill(token);
+    await page.locator(opcode === 'L' ? '#manual-lock' : '#manual-unlock').click();
+  };
   await page.screenshot({ path: join(artifacts, 'mobile.png'), fullPage: true });
-  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), true);
-  assert.equal(await page.locator('#lock').isDisabled(), true);
+  assert.ok((await page.locator('body').innerText()).split(/\s+/).length < 40);
+  assert.equal(await page.locator('.primary-actions button:visible').count(), 1);
+  const connectBox = await page.locator('#connect').boundingBox();
+  assert.ok(connectBox.y + connectBox.height <= 844);
+  const started = Date.now();
   await page.locator('#connect').click();
-  await page.waitForFunction(() => document.querySelector('#connection-pill').textContent === 'Connected');
-  assert.equal(await page.locator('#state-label').textContent(), 'Open & ready');
-  await page.evaluate(() => window.tagTest.setup());
+  await state('Lock your bag');
   await page.locator('#lock').click();
-  await page.waitForFunction(() => document.querySelector('#state-label').textContent === 'Locked & assigned');
+  await state('Press the tag button');
+  assert.equal(await page.evaluate(() => window.tagTest.writes.length), 0);
+  await page.locator('#cancel-lock').click();
+  await page.evaluate(async () => { window.tagTest.setup(); await Promise.resolve(); });
+  assert.equal(await page.evaluate(() => window.tagTest.writes.length), 0);
+  await page.evaluate(() => window.tagTest.expireSetup());
+  await page.locator('#lock').click();
+  await state('Press the tag button');
+  await page.screenshot({ path: join(artifacts, 'button-step.png'), fullPage: true });
+  assert.equal(await page.evaluate(() => window.tagTest.writes.length), 0);
+  await page.evaluate(() => window.tagTest.setup());
+  await state('Bag locked');
   assert.equal(await page.evaluate(() => window.tagTest.writes[0]), 'LA1B2C3D4E5F60718');
+  assert.equal(await page.locator('.primary-actions button:visible').count(), 1);
   assert.equal(await page.locator('#scanner').evaluate(element => element.open), false);
+  await page.screenshot({ path: join(artifacts, 'locked.png'), fullPage: true });
   await page.evaluate(() => { window.tagTest.pass = 2; });
   await page.locator('#unlock').click();
-  await page.waitForFunction(() => document.querySelector('#notice').textContent.includes('does not match'));
-  assert.equal(await page.locator('#state-label').textContent(), 'Locked & assigned');
+  await page.locator('#notice').getByText(/Wrong pass/).waitFor();
+  assert.equal(await page.locator('#state-label').textContent(), 'Bag locked');
   await page.evaluate(() => { window.tagTest.pass = 1; });
   await page.locator('#unlock').click();
-  await page.waitForFunction(() => document.querySelector('#notice').textContent.includes('Assignment cleared'));
+  await state('Bag released');
+  const cycleMs = Date.now() - started;
+  assert.ok(cycleMs < 60000, `Connect/lock/release took ${cycleMs} ms`);
+  await page.screenshot({ path: join(artifacts, 'released.png'), fullPage: true });
+  await options();
   await page.locator('#storage').click();
-  await page.waitForFunction(() => document.querySelector('#state-label').textContent === 'Closed for storage');
+  await state('Tag stored');
   await page.evaluate(() => { window.tagTest.service(); window.tagTest.setup(); });
-  await page.locator('summary').click();
-  await page.locator('#token').fill('9a8b7c6d5e4f3021');
-  await page.locator('#manual-lock').click();
-  await page.waitForFunction(() => document.querySelector('#state-label').textContent === 'Locked & assigned');
-  await page.locator('#token').fill('A1B2C3D4E5F60718');
-  await page.locator('#manual-unlock').click();
-  await page.waitForFunction(() => document.querySelector('#notice').textContent.includes('does not match'));
+  await manual('9a8b7c6d5e4f3021', 'L');
+  await state('Bag locked');
+  await manual('A1B2C3D4E5F60718', 'U');
+  await page.locator('#notice').getByText(/Wrong pass/).waitFor();
+  await options();
   await page.locator('#flash').click();
-  await page.waitForFunction(() => document.querySelector('#notice').textContent.includes('flashing'));
-  await page.setViewportSize({ width: 1280, height: 1000 });
+  await page.locator('#notice').getByText('Tag is flashing.', { exact: true }).waitFor();
+  await page.setViewportSize({ width: 1280, height: 900 });
   await page.screenshot({ path: join(artifacts, 'desktop.png'), fullPage: true });
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), true);
+  await options();
   await page.locator('#disconnect').click();
+  await state('Connect your tag');
   assert.equal(await page.locator('#unlock').isDisabled(), true);
-  assert.equal(await page.locator('#connection-pill').textContent(), 'Disconnected');
-  assert.ok(await page.evaluate(() => window.tagTest.cameraStops >= 3));
+  assert.ok(await page.evaluate(() => window.tagTest.cameraStops >= 4));
   await page.goto(`${baseURL}/demo-passes.html`);
   assert.equal(await page.locator('.pass').count(), 2);
   assert.deepEqual(errors, []);
-  console.log('Browser checks passed: mobile/desktop layout, real ZXing camera-frame decoding, lock, wrong token, unlock, storage, reuse, manual entry, LED, disconnect, and printable passes. BLE transport and camera frames were simulated.');
+  console.log(`Browser checks passed: scan-first setup, cancellation, real QR camera decoding, wrong-pass recovery, storage, manual entry and reconnect. Connect/lock/release: ${(cycleMs / 1000).toFixed(1)}s with simulated hardware.`);
   console.log(`Screenshots: ${artifacts}`);
 } finally { await browser.close(); }

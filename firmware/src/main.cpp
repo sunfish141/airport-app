@@ -3,8 +3,18 @@
 #include <Preferences.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/queue.h>
+#include <array>
 #include <atomic>
+#include <cstdio>
+#include <cstring>
+
+#include "Config.h"
 #include "Controller.h"
+#include "BoardConfig.h"
+
+#if !defined(CONFIG_IDF_TARGET_ESP32)
+#error "Use the esp32_wroom32 PlatformIO environment for the purchased ESP-WROOM-32 board."
+#endif
 
 namespace {
 Preferences preferences;
@@ -26,17 +36,17 @@ class Board : public tag::Hardware {
     return preferences.putBytes("state", bytes.data(), bytes.size()) == bytes.size();
   }
   bool drive(tag::Pending direction) override {
-    if (ledcSetup(config::PWM_CHANNEL, 50, config::PWM_RESOLUTION) == 0) return false;
-    ledcAttachPin(config::SERVO_PIN, config::PWM_CHANNEL);
+    if (ledcSetup(boardconfig::PWM_CHANNEL, boardconfig::SERVO_HZ, boardconfig::PWM_RESOLUTION) == 0) return false;
+    ledcAttachPin(boardconfig::SERVO_PIN, boardconfig::PWM_CHANNEL);
     pwmAttached = true;
-    const uint16_t pulse = direction == tag::Pending::Open ? config::OPEN_PULSE_US : config::CLOSED_PULSE_US;
-    const uint32_t duty = uint32_t(pulse) * ((1u << config::PWM_RESOLUTION) - 1) / 20000u;
-    ledcWrite(config::PWM_CHANNEL, duty);
+    const uint16_t pulse = direction == tag::Pending::Open ? boardconfig::OPEN_PULSE_US : boardconfig::CLOSED_PULSE_US;
+    const uint32_t duty = uint32_t(pulse) * ((1u << boardconfig::PWM_RESOLUTION) - 1) / boardconfig::SERVO_PERIOD_US;
+    ledcWrite(boardconfig::PWM_CHANNEL, duty);
     return true;
   }
   void stop() override {
-    if (pwmAttached) { ledcWrite(config::PWM_CHANNEL, 0); ledcDetachPin(config::SERVO_PIN); pwmAttached = false; }
-    digitalWrite(config::SERVO_PIN, LOW);
+    if (pwmAttached) { ledcWrite(boardconfig::PWM_CHANNEL, 0); ledcDetachPin(boardconfig::SERVO_PIN); pwmAttached = false; }
+    digitalWrite(boardconfig::SERVO_PIN, LOW);
   }
   void flash(uint32_t now) override { flashing = true; flashStarted = now; }
   void publish(const tag::Status& status) override {
@@ -56,7 +66,7 @@ class Commands : public NimBLECharacteristicCallbacks {
     const auto value = characteristic->getValue();
     Message message{};
     message.length = value.size() > 17 ? 18 : uint8_t(value.size());
-    if (message.length <= 17) memcpy(message.bytes, value.data(), message.length);
+    if (message.length <= 17) std::memcpy(message.bytes, value.data(), message.length);
     if (xQueueSend(commandQueue, &message, 0) != pdTRUE) overflow.store(true);
   }
 } commands;
@@ -65,22 +75,23 @@ class ServerCallbacks : public NimBLEServerCallbacks {
 } serverCallbacks;
 
 void sample(uint32_t now) {
-  openInput.update(digitalRead(config::OPEN_PIN) == LOW, now);
-  closedInput.update(digitalRead(config::CLOSED_PIN) == LOW, now);
-  buttonInput.update(digitalRead(config::BUTTON_PIN) == LOW, now);
+  openInput.update(digitalRead(boardconfig::OPEN_PIN) == LOW, now);
+  closedInput.update(digitalRead(boardconfig::CLOSED_PIN) == LOW, now);
+  buttonInput.update(digitalRead(boardconfig::BUTTON_PIN) == LOW, now);
 }
 }
 
 void setup() {
-  // GPIO21 is the external status LED. Do not enable UART serial on this pin.
-  pinMode(config::SERVO_PIN, OUTPUT);
-  digitalWrite(config::SERVO_PIN, LOW);
-  pinMode(config::OPEN_PIN, INPUT_PULLUP);
-  pinMode(config::CLOSED_PIN, INPUT_PULLUP);
-  pinMode(config::BUTTON_PIN, INPUT_PULLUP);
-  pinMode(config::LED_PIN, OUTPUT);
+  // The external LED uses GPIO26; UART0 and flash pins are left unused.
+  // No serial logging of tokens or passenger data.
+  pinMode(boardconfig::SERVO_PIN, OUTPUT);
+  digitalWrite(boardconfig::SERVO_PIN, LOW);
+  pinMode(boardconfig::OPEN_PIN, INPUT_PULLUP);
+  pinMode(boardconfig::CLOSED_PIN, INPUT_PULLUP);
+  pinMode(boardconfig::BUTTON_PIN, INPUT_PULLUP);
+  pinMode(boardconfig::LED_PIN, OUTPUT);
   commandQueue = xQueueCreate(8, sizeof(Message));
-  if (!commandQueue) { while (true) { digitalWrite(config::LED_PIN, !digitalRead(config::LED_PIN)); delay(100); } }
+  if (!commandQueue) { while (true) { digitalWrite(boardconfig::LED_PIN, !digitalRead(boardconfig::LED_PIN)); delay(100); } }
 
   storageReady = preferences.begin("luggage", false);
   tag::Record record;
@@ -98,7 +109,7 @@ void setup() {
 
   const uint64_t chipId = ESP.getEfuseMac();
   char name[18];
-  snprintf(name, sizeof(name), "Carry-%06X", unsigned((chipId >> 24) & 0xffffff));
+  std::snprintf(name, sizeof(name), "Carry-%06X", unsigned((chipId >> 24) & 0xffffff));
   NimBLEDevice::init(name);
   auto* server = NimBLEDevice::createServer();
   server->setCallbacks(&serverCallbacks);
@@ -126,6 +137,6 @@ void loop() {
   if (flashing && uint32_t(now - flashStarted) >= 2000) flashing = false;
   const bool fault = controller.status().state == tag::State::Fault;
   const bool setup = controller.status().setupMs > 0;
-  digitalWrite(config::LED_PIN, flashing ? (uint32_t(now - flashStarted) / 100) % 2 : fault ? (now / 250) % 2 : setup ? (now / 500) % 2 : LOW);
+  digitalWrite(boardconfig::LED_PIN, flashing ? (uint32_t(now - flashStarted) / 100) % 2 : fault ? (now / 250) % 2 : setup ? (now / 500) % 2 : LOW);
   delay(2);
 }

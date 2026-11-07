@@ -1,6 +1,6 @@
 # Firmware workbench
 
-The workbench executes the **unchanged production** `firmware/src/Controller.cpp`, `firmware/include/Controller.h` and `firmware/include/Config.h` as WebAssembly. `Simulator.cpp` implements their `Hardware` interface and a mechanical/input model. The existing JavaScript mobile demo remains available separately.
+The workbench executes the **unchanged production** `firmware/src/Controller.cpp`, `firmware/include/Controller.h`, `firmware/include/Config.h` and `firmware/include/BoardConfig.h` as WebAssembly. `Simulator.cpp` implements their `Hardware` interface and a mechanical/input model. The existing JavaScript mobile demo remains available separately.
 
 ## Run
 
@@ -13,12 +13,14 @@ npm run simulate
 Open `/simulation.html` at the printed local URL. The included WebAssembly artifact requires no compiler to run. This page and `/?demo=firmware` are also included in `npm run build` output and work with static hosting. Workbench controls talk to the app's opt-in firmware transport; the normal `/` app uses real Web Bluetooth.
 
 1. Click **Connect** above the phone.
-2. Click **Setup hold · 650 ms**, or hold/release the physical-button control yourself. These drive the raw button input through the production debounce and hold logic. They do not call a setup bypass.
-3. In the phone, select **Scan to lock**, then pass A. The QR image is decoded with ZXing and the same raw `L` command is queued to the controller.
-4. Watch the event trace: atomic simulated NVS commit precedes PWM; switch confirmation precedes the final commit. Try pass B to observe token rejection in C++.
-5. Unlock with A, close for storage, then use **Service hold · 3.2 s**. Recovery really waits for the firmware's three-second hold before opening.
+2. In the phone, select **Scan to lock**, then pass A. The QR image is decoded with ZXing; the phone waits for the setup button.
+3. Click **Setup hold · 650 ms**, or hold/release the physical-button control yourself. These drive the raw button input through the production debounce and hold logic. They do not call a setup bypass. Once the firmware reports its setup window, the phone queues the same raw `L` command to the controller.
+4. Expand **Event trace**: atomic simulated NVS commit precedes PWM; switch confirmation precedes the final commit. Try pass B to observe token rejection in C++.
+5. Release with A, close for storage from **Tag options**, then use **Service hold · 3.2 s**. Recovery really waits for the firmware's three-second hold before opening.
 
-The SVG is an illustrative cutaway, not a dimensioned mechanical assembly. It shows sliding bolt position, cable eyelet retention, both contact inputs, servo horn/linkage, supply branches, controller LED and stored ownership/intent. Each displayed state comes from the WebAssembly adapter/controller; the drawing does not choose the state.
+The SVG is an illustrative cutaway, not a dimensioned mechanical assembly. It shows sliding bolt position, cable eyelet retention, both contact inputs, servo horn/linkage, supply branches, external status LED and stored ownership/intent. Each displayed state comes from the WebAssembly adapter/controller; the drawing does not choose the state.
+
+The workbench now depicts the purchased **ESP-WROOM-32 / SG90 / LM2596** hardware. GPIO labels and servo frequency come from the compiled `BoardConfig.h`, including the button trace. Its DC input represents a source suitable for a 5 V buck output, not a single-cell boost supply. The simulated endpoint switches and external LED remain additional hardware requirements; see [`../README.md`](../README.md).
 
 ## Fidelity and boundaries
 
@@ -33,7 +35,7 @@ The SVG is an illustrative cutaway, not a dimensioned mechanical assembly. It sh
 | Motion and switches | Assumed linear full stroke of 650 ms; adjustable 100–1500 ms in the UI. Endpoint thresholds at 2% / 98%, with assumed 12 ms contact bounce before production debounce |
 | Cable | Geometric retention only. No invented cable-presence input or firmware interlock; the real design has none |
 | Power | Main switch stops the modeled servo and resets volatile controller state on restart, preserving position and NVS bytes |
-| Electrical/mechanical behavior | No ESP32 CPU, NimBLE radio, Preferences driver, torque, linkage force, current, boost behavior, battery discharge or brownout model |
+| Electrical/mechanical behavior | No ESP32 CPU, NimBLE radio, Preferences driver, torque, linkage force, current, LM2596 behavior, DC source behavior or brownout model |
 
 The plant assumes the configured pulses correspond to calibrated endpoint positions and that motion stops when PWM is detached. Neither is a hardware guarantee. Actual SG90 travel, holding force, binding, current draw and power integrity need bench measurements. The drawing omits circuit detail and cannot validate wiring. Flash save failure and CRC corruption are explicit fault injections, not a flash wear or brownout model.
 
