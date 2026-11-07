@@ -1,0 +1,25 @@
+{
+  "name": "luggage-tag-app",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.16.0"
+  },
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "build": "vite build",
+    "preview": "vite preview --host 127.0.0.1",
+    "test": "node --test --experimental-test-isolation=none test/*.test.js",
+    "test:browser": "node test/browser-smoke.mjs",
+    "passes": "node scripts/generate-passes.js"
+  },
+  "dependencies": {
+    "@zxing/browser": "0.1.5"
+  },
+  "devDependencies": {
+    "playwright": "1.56.1",
+    "qrcode": "1.5.4",
+    "vite": "6.4.5"
+  }
+}

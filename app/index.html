@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#123c36" />
+    <meta name="description" content="Connect, scan a demo pass, and control your luggage tag." />
+    <title>Carry · Luggage tag</title>
+  </head>
+  <body>
+    <div class="shell">
+      <header><a class="brand" href="./" aria-label="Carry home"><span class="brand-icon" aria-hidden="true">c.</span>carry<span class="brand-note">LUGGAGE TAG</span></a><a class="text-link" href="./demo-passes.html" target="_blank" rel="noopener">Demo passes ↗</a></header>
+      <main>
+        <section class="intro"><p class="eyebrow">A LITTLE PEACE OF MIND</p><h1>Your bag.<br />Your way forward.</h1><p>One tag, ready for the next trip.<br />Connect your tag and scan your demo pass.</p></section>
+        <section class="workspace" aria-label="Tag controls">
+          <div class="card tag-card">
+            <div class="card-top"><h2>Your luggage tag</h2><span id="connection-pill" class="pill">Disconnected</span></div>
+            <div class="tag-illustration" aria-hidden="true"><div class="tag-loop"></div><div class="tag-body"><span>carry.</span><div class="tag-bars"></div><small>READY FOR WHAT’S NEXT</small></div></div>
+            <p id="device-name" class="device-name">Let’s find your tag</p>
+            <p id="connection-copy" class="muted">Keep your tag powered on and nearby.</p>
+            <button id="connect" class="primary">Connect tag <span aria-hidden="true">↗</span></button>
+            <button id="disconnect" class="subtle" hidden>Disconnect</button>
+          </div>
+          <div class="card controls-card">
+            <div class="card-top"><h2>Make it yours</h2><span class="step-number">01 — 03</span></div>
+            <div class="state-box"><span id="state-dot" class="state-dot"></span><div><p id="state-label">Waiting for connection</p><p id="state-detail" class="muted">The tag confirms every movement.</p></div></div>
+            <div class="setup-line"><span>Setup window</span><strong id="setup-time">Inactive</strong></div>
+            <p class="help">To assign an open tag, hold its button for ½ second, then release. You’ll have 10 seconds to scan.</p>
+            <div class="scan-actions"><button id="lock" class="primary" disabled>Scan to lock <span aria-hidden="true">▣</span></button><button id="unlock" class="secondary" disabled>Scan to unlock <span aria-hidden="true">↗</span></button></div>
+            <div class="utility-actions"><button id="storage" class="text-button" disabled>Close for storage</button><button id="flash" class="text-button" disabled>Find my tag <span aria-hidden="true">✧</span></button></div>
+            <details><summary>Enter a demo token manually</summary><form id="manual-form"><label for="token">16-character demo token</label><input id="token" name="token" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="16" placeholder="A1B2C3D4E5F60718" pattern="[a-fA-F0-9]{16}" required /><div class="manual-actions"><button id="manual-lock" class="secondary" type="submit" name="action" value="L" disabled>Lock</button><button id="manual-unlock" class="secondary" type="submit" name="action" value="U" disabled>Unlock</button></div></form></details>
+          </div>
+        </section>
+        <div id="notice" class="notice" role="status" aria-live="polite">Connect a tag to get started.</div>
+        <section class="how-it-works" aria-label="How it works"><div><span>01</span><h3>Connect your tag</h3><p>Pair nearby over Bluetooth.</p></div><div><span>02</span><h3>Scan your pass</h3><p>A demo QR assigns your tag.</p></div><div><span>03</span><h3>Ready to reuse</h3><p>Unlock with the same pass.</p></div></section>
+        <p class="service-note">Opening a stored tag or recovering a fault? Hold the physical tag button for 3 seconds. Ownership clears when the open switch confirms release.</p>
+      </main>
+      <footer><span>Made for the journey.</span><span>Demo passes only · Android Chrome · HTTPS</span></footer>
+    </div>
+    <dialog id="scanner"><div class="scanner-heading"><div><p class="eyebrow">DEMO BOARDING PASS</p><h2 id="scanner-title">Scan to lock</h2></div><button id="cancel-scan" class="icon-button" aria-label="Close camera">×</button></div><div class="camera-frame"><video id="video" muted playsinline></video><div class="scan-guide" aria-hidden="true"></div></div><p id="scan-message" role="status">Place the demo QR inside the frame.</p><p class="help">Only synthetic passes with 16 hexadecimal characters are supported.</p></dialog>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
