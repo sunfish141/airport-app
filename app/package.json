@@ -8,10 +8,12 @@
   },
   "scripts": {
     "dev": "vite --host 127.0.0.1",
+    "emulator": "vite --host 127.0.0.1 --open /emulator.html",
     "build": "vite build",
     "preview": "vite preview --host 127.0.0.1",
     "test": "node --test --experimental-test-isolation=none test/*.test.js",
     "test:browser": "node test/browser-smoke.mjs",
+    "test:emulator": "node test/emulator-browser.mjs",
     "passes": "node scripts/generate-passes.js"
   },
   "dependencies": {

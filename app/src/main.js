@@ -1,14 +1,20 @@
 import { BrowserQRCodeReader } from '@zxing/browser';
 import { TagConnection, errorMessage } from './bluetooth.js';
 import { normalizeToken } from './protocol.js';
+import { SimulatedTag } from './simulated-tag.js';
 import './style.css';
 
 const $ = (id) => document.getElementById(id);
+const demoMode = new URLSearchParams(location.search).get('demo') === '1';
+const simulation = demoMode
+  ? new SimulatedTag({ onChange: publishDemoStatus })
+  : null;
 let busy = false;
 let scanSession = 0;
 let controls;
 let setupDeadline = 0;
 let latest = null;
+let demoScanOpcode = null;
 const labels = {
   OPEN_FREE: ['Open & ready', 'Your tag is unassigned and ready for setup.'],
   CLOSED_FREE: ['Closed for storage', 'Hold the tag button for 3 seconds to reopen.'],
@@ -23,6 +29,7 @@ function notice(message, error = false) {
 }
 
 const connection = new TagConnection({
+  ...(simulation ? { bluetooth: simulation.bluetooth } : {}),
   onStatus(status) {
     latest = status;
     setupDeadline = performance.now() + status.setupMs;
@@ -31,13 +38,15 @@ const connection = new TagConnection({
     $('state-detail').textContent = detail;
     $('state-dot').className = `state-dot ${status.state === 'FAULT' ? 'fault' : status.state === 'MOVING' ? 'busy' : 'good'}`;
     if (status.error !== 'NONE') notice(errorMessage(status.error), true);
+    else if (status.command === 'S' && status.state === 'OPEN_FREE') notice('Service opening confirmed. Assignment cleared; ready to reuse.');
+    else if (status.command === 'S' && status.state === 'MOVING') notice('Service opening requested. Waiting for confirmed release…');
     render();
   },
   onConnection(connected, message) {
     $('connection-pill').textContent = connected ? 'Connected' : 'Disconnected';
     $('connection-pill').classList.toggle('connected', connected);
     $('device-name').textContent = connected ? message : 'Let’s find your tag';
-    $('connection-copy').textContent = connected ? 'Your tag is connected over Bluetooth.' : 'Keep your tag powered on and nearby.';
+    $('connection-copy').textContent = connected ? (simulation ? 'Virtual tag connected. No hardware is in use.' : 'Your tag is connected over Bluetooth.') : (simulation ? 'Connect the virtual tag to try this demo.' : 'Keep your tag powered on and nearby.');
     $('connect').hidden = connected;
     $('disconnect').hidden = !connected;
     if (!connected) {
@@ -49,6 +58,7 @@ const connection = new TagConnection({
       $('state-dot').className = 'state-dot';
     }
     notice(connected ? 'Connected. Your tag’s confirmed state is shown above.' : message);
+    if (simulation) publishDemoStatus(simulation.snapshot());
     render();
   },
 });
@@ -78,6 +88,7 @@ async function run(opcode, token) {
 
 function stopScanner() {
   ++scanSession;
+  demoScanOpcode = null;
   controls?.stop();
   controls = undefined;
   const stream = $('video').srcObject;
@@ -87,7 +98,7 @@ function stopScanner() {
 }
 
 async function scan(opcode) {
-  if (!globalThis.isSecureContext || !navigator.mediaDevices?.getUserMedia) {
+  if (!simulation && (!globalThis.isSecureContext || !navigator.mediaDevices?.getUserMedia)) {
     notice('Camera scanning needs HTTPS and camera permission. You can also enter a demo token manually.', true);
     return;
   }
@@ -96,6 +107,11 @@ async function scan(opcode) {
   $('scanner-title').textContent = opcode === 'L' ? 'Scan to lock' : 'Scan to unlock';
   $('scan-message').textContent = 'Place the demo QR inside the frame.';
   $('scanner').showModal();
+  if (simulation) {
+    demoScanOpcode = opcode;
+    $('scan-message').textContent = 'Choose a synthetic pass to simulate scanning its QR.';
+    return;
+  }
   try {
     const reader = new BrowserQRCodeReader();
     const started = await reader.decodeFromConstraints({ audio: false, video: { facingMode: { ideal: 'environment' } } }, $('video'), (result, error, currentControls) => {
@@ -114,6 +130,27 @@ async function scan(opcode) {
     stopScanner();
     notice(`Camera unavailable: ${error.message}. Use manual token entry if needed.`, true);
   }
+}
+
+async function chooseDemoPass(index) {
+  const opcode = demoScanOpcode;
+  const session = scanSession;
+  if (!opcode) return;
+  const buttons = document.querySelectorAll('[data-demo-pass]');
+  buttons.forEach((button) => { button.disabled = true; });
+  try {
+    const result = await new BrowserQRCodeReader().decodeFromImageUrl(new URL(`./demo-pass-${index}.svg`, location.href).href);
+    if (session !== scanSession) return;
+    const token = normalizeToken(result.getText());
+    stopScanner();
+    await run(opcode, token);
+  } catch (error) {
+    if (session === scanSession) $('scan-message').textContent = error.message;
+  } finally { buttons.forEach((button) => { button.disabled = false; }); }
+}
+
+function publishDemoStatus(status) {
+  if (window.parent !== window) window.parent.postMessage({ type: 'carry-demo-status', status }, location.origin);
 }
 
 $('connect').addEventListener('click', async () => {
@@ -138,7 +175,34 @@ $('manual-form').addEventListener('submit', (event) => {
   catch (error) { notice(error.message, true); }
 });
 document.addEventListener('visibilitychange', () => { if (document.hidden) stopScanner(); });
-window.addEventListener('pagehide', () => { stopScanner(); connection.disconnect(); });
+window.addEventListener('pagehide', () => { stopScanner(); connection.disconnect(); simulation?.dispose(); });
 setInterval(render, 200);
-if (!globalThis.isSecureContext) notice('Open this app over HTTPS on Android Chrome to enable Bluetooth and the camera.', true);
+if (simulation) {
+  document.querySelector('.brand').href = './?demo=1';
+  const banner = document.createElement('div');
+  banner.className = 'demo-banner';
+  banner.innerHTML = '<strong>Demo mode · Virtual tag</strong><span>No real Bluetooth or motor</span><div><button id="quick-setup">Start setup</button><button id="quick-service">Service open</button></div>';
+  document.body.prepend(banner);
+  $('quick-setup').addEventListener('click', () => simulation.setup());
+  $('quick-service').addEventListener('click', () => simulation.service());
+  $('camera-frame').hidden = true;
+  $('demo-scanner').hidden = false;
+  document.querySelectorAll('[data-demo-pass]').forEach((button) => {
+    button.addEventListener('click', () => chooseDemoPass(Number(button.dataset.demoPass)));
+  });
+  window.addEventListener('message', (event) => {
+    if (event.origin !== location.origin || event.source !== window.parent || event.data?.type !== 'carry-demo-action') return;
+    const { action, value } = event.data;
+    if (action === 'connect' && !connection.connected && !connection.connecting) $('connect').click();
+    else if (action === 'disconnect') connection.disconnect();
+    else if (action === 'setup') simulation.setup();
+    else if (action === 'service') simulation.service();
+    else if (action === 'obstruction') simulation.setObstructed(value);
+    else if (action === 'reboot') simulation.reboot();
+    else if (action === 'reset') simulation.reset();
+    publishDemoStatus(simulation.snapshot());
+  });
+  publishDemoStatus(simulation.snapshot());
+  notice('Demo mode: connect the virtual tag, start setup, then scan a demo pass.');
+} else if (!globalThis.isSecureContext) notice('Open this app over HTTPS on Android Chrome to enable Bluetooth and the camera.', true);
 else if (!navigator.bluetooth) notice('Web Bluetooth is unavailable in this browser. Open this app in Android Chrome.', true);

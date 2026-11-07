@@ -37,7 +37,7 @@
       </main>
       <footer><span>Made for the journey.</span><span>Demo passes only · Android Chrome · HTTPS</span></footer>
     </div>
-    <dialog id="scanner"><div class="scanner-heading"><div><p class="eyebrow">DEMO BOARDING PASS</p><h2 id="scanner-title">Scan to lock</h2></div><button id="cancel-scan" class="icon-button" aria-label="Close camera">×</button></div><div class="camera-frame"><video id="video" muted playsinline></video><div class="scan-guide" aria-hidden="true"></div></div><p id="scan-message" role="status">Place the demo QR inside the frame.</p><p class="help">Only synthetic passes with 16 hexadecimal characters are supported.</p></dialog>
+    <dialog id="scanner"><div class="scanner-heading"><div><p class="eyebrow">DEMO BOARDING PASS</p><h2 id="scanner-title">Scan to lock</h2></div><button id="cancel-scan" class="icon-button" aria-label="Close camera">×</button></div><div id="camera-frame" class="camera-frame"><video id="video" muted playsinline></video><div class="scan-guide" aria-hidden="true"></div></div><div id="demo-scanner" class="demo-pass-picker" hidden><button data-demo-pass="1" class="secondary"><img src="./demo-pass-1.svg" alt="" /><span>Use demo pass A</span></button><button data-demo-pass="2" class="secondary"><img src="./demo-pass-2.svg" alt="" /><span>Use demo pass B</span></button></div><p id="scan-message" role="status">Place the demo QR inside the frame.</p><p class="help">Only synthetic passes with 16 hexadecimal characters are supported.</p></dialog>
     <script type="module" src="/src/main.js"></script>
   </body>
 </html>

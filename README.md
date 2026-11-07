@@ -22,6 +22,8 @@ npm run dev
 
 Open the printed localhost URL for desktop layout development. For phone operation, build with `npm run build` and serve the contents of `app/dist/` from an HTTPS origin trusted by the phone. A plain HTTP LAN URL cannot access Web Bluetooth or the camera. Use **Android Chrome** and test the actual phone. Bluetooth selection opens when the user taps **Connect tag**. See [Chrome's Web Bluetooth requirements](https://developer.chrome.com/docs/capabilities/bluetooth).
 
+For an interactive mobile preview without hardware, run `npm run emulator` inside `app/`. It opens a phone frame with selectable screen sizes, rotation and a virtual tag. See [`app/README.md`](app/README.md#mobile-emulator) for the demo workflow and recovery controls.
+
 The printable passes are available through **Demo passes** or `/demo-passes.html`. Two QR SVGs and the printable page are committed in `app/public/`; `npm run passes` regenerates them. Each QR contains only its synthetic 16-character token. The app does not parse real airline barcodes. Camera decoding uses [`@zxing/browser`](https://github.com/zxing-js/browser); manual token entry is available if camera access is unavailable.
 
 ## Firmware

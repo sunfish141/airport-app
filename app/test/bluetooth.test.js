@@ -137,10 +137,23 @@ test('an unrelated or stale event cannot complete a request', async () => {
   await connection.connect();
   const result = connection.send('C');
   connection.accept(packet({ sequence: 1, state: 1, flags: 4, command: 'C' }));
-  connection.accept(packet({ sequence: 2, state: 1, flags: 4, command: 'S' }));
+  connection.accept(packet({ sequence: 2, state: 1, flags: 4, command: 'F' }));
   assert.notEqual(connection.pending, null);
   connection.accept(packet({ sequence: 3, state: 1, flags: 4, command: 'C' }));
   await result;
+  connection.disconnect();
+});
+
+test('service opening cancels a pending command without a false timeout or success', async () => {
+  const { connection } = mock();
+  await connection.connect();
+  const result = assert.rejects(connection.send('L', 'A1B2C3D4E5F60718'), /Service opening interrupted/);
+  connection.accept(packet({ sequence: 2, state: 3, flags: 3, command: 'S' }));
+  await result;
+  assert.equal(connection.pending, null);
+  assert.equal(connection.connected, true);
+  connection.accept(packet({ sequence: 3, state: 0, flags: 2, command: 'S' }));
+  assert.equal(connection.status.state, 'OPEN_FREE');
   connection.disconnect();
 });
 

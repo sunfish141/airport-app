@@ -49,7 +49,11 @@ export class TagConnection {
     this.status = status;
     this.onStatus(status);
     const pending = this.pending;
-    if (!pending || !isNewer(status.sequence, pending.baseline) || status.command !== pending.opcode) return;
+    if (!pending || !isNewer(status.sequence, pending.baseline)) return;
+    if (status.command === 'S' && pending.opcode !== 'F') {
+      return this.settle(new Error('Service opening interrupted this command. Check the confirmed tag state.'));
+    }
+    if (status.command !== pending.opcode) return;
     if (status.error !== 'NONE') return this.settle(new Error(errorMessage(status.error)));
     const target = { L: 'LOCKED_ASSIGNED', U: 'OPEN_FREE', C: 'CLOSED_FREE' }[pending.opcode];
     if (pending.opcode === 'F' || status.state === target) this.settle(null, status);

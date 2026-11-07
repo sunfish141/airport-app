@@ -10,6 +10,28 @@
   --line: #dce3da;
 }
 
+.demo-banner {
+  background: #e5eddb;
+  color: #173b35;
+  padding: 12px 20px;
+  border-bottom: 1px solid #c7d0b9;
+  font-size: 10px;
+  line-height: 1.6;
+}
+.demo-banner strong, .demo-banner span { display: block; }
+.demo-banner button {
+  border: 1px solid #b5c4a8;
+  background: white;
+  color: #173b35;
+  border-radius: 5px;
+  padding: 6px 10px;
+  margin: 7px 6px 0 0;
+  font-size: 10px;
+}
+.demo-pass-picker { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.demo-pass-picker button { flex-direction: column; text-align: center; }
+.demo-pass-picker img { width: 100%; max-width: 150px; }
+
 * {
   box-sizing: border-box;
 }
