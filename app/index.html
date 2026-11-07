@@ -68,6 +68,11 @@
       <p id="signal-trend" class="signal-trend" aria-live="polite">Hold the phone steady for a few seconds.</p>
       <p id="signal-reading" class="signal-reading"></p>
       <p class="finder-hint">Walk slowly and follow a stronger signal. Walls and your body can affect it. No direction or exact distance.</p>
+      <section class="location-tools" aria-label="Approximate tag location">
+        <button id="location-update" class="location-update">Estimate location</button>
+        <p id="location-message" hidden><span id="location-status" role="status"></span><span id="location-age" aria-hidden="true"></span></p>
+        <a id="location-map" class="support-link" target="_blank" rel="noopener" hidden>Open estimated area in Maps ↗</a>
+      </section>
       <button id="finder-flash" class="primary">Flash light</button>
       <button id="finder-reconnect" class="primary" hidden>Reconnect</button>
       <button id="finder-stop" class="text-button find-button" hidden>Stop reconnecting</button>

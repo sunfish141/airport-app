@@ -14,6 +14,8 @@ npm run simulate
 
 Open `/simulation.html` at the printed URL. The compiled firmware is included; no C++ compiler or physical hardware is needed to run it.
 
+**Find tag → Estimate location** exercises the connected lookup flow with synthetic Wi-Fi readings and a labelled demo estimate. Radio scanning and location lookup run in JavaScript; they do not test the real `WifiScanner.cpp` adapter or an external provider. The actual C++ controller still handles actuation and recovery.
+
 1. Click **Connect** above the phone.
 2. In the phone, select **Scan to lock** and pass A.
 3. Click **Setup hold · 650 ms** when prompted; wait for **Bag locked**.

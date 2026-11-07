@@ -8,6 +8,7 @@ export default defineConfig(({ mode }) => {
   if (mode === 'emulator') checkFirmwareBuild();
   return {
     root: app,
+    envDir: fileURLToPath(new URL('./', import.meta.url)),
     define: { 'import.meta.env.VITE_CARRY_DEMO': JSON.stringify(mode === 'emulator' ? 'firmware' : '') },
     plugins: [{
       name: 'carry-native-entry',

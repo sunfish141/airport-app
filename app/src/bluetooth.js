@@ -1,4 +1,5 @@
 import { UUIDS, decodeStatus, decodeSignal, encodeCommand, isNewer } from './protocol.js';
+import { decodeWifiScan } from './location-protocol.js';
 
 export class TagConnection {
   constructor({ bluetooth = globalThis.navigator?.bluetooth, requireSecureContext = true, onStatus = () => {}, onConnection = () => {} } = {}) {
@@ -9,6 +10,7 @@ export class TagConnection {
     this.connecting = false;
     this.session = 0;
     this.gattTail = Promise.resolve();
+    this.wifiRequest = Math.floor(Math.random() * 65535);
     this.handleValue = (event) => { if (event.target === this.statusCharacteristic) this.accept(event.target.value); };
     this.handleDisconnect = () => this.cleanup('Tag disconnected. Reconnect to read its confirmed state.');
   }
@@ -137,7 +139,7 @@ export class TagConnection {
 
   readSignal() {
     if (!this.connected) return Promise.reject(new Error('Connect to a tag first.'));
-    if (this.pending) return Promise.resolve(null);
+    if (this.pending || this.wifiScan) return Promise.resolve(null);
     const session = this.session;
     const service = this.service;
     return this.performGatt(async () => {
@@ -155,6 +157,43 @@ export class TagConnection {
       if (!this.signalCharacteristic || typeof this.signalCharacteristic.readValue !== 'function') return { supported: false };
       return { supported: true, rssi: decodeSignal(await this.signalCharacteristic.readValue()) };
     }, 2500);
+  }
+
+  async scanWifi({ signal } = {}) {
+    if (!this.connected) throw new Error('Connect to your tag first.');
+    if (this.wifiScan) throw new Error('A location scan is already running.');
+    const scan = this.wifiScan = {};
+    const session = this.session;
+    const request = this.wifiRequest = (this.wifiRequest + 1) & 65535;
+    const deadline = performance.now() + 8000;
+    const check = () => {
+      signal?.throwIfAborted();
+      if (!this.connected || session !== this.session) throw new Error('Tag disconnected.');
+      if (this.pending || this.status?.state === 'MOVING') throw new Error('Wait for the tag to finish, then update its location.');
+    };
+    try {
+      const characteristic = await this.performGatt(async () => {
+        check();
+        let characteristic;
+        try { characteristic = await this.service.getCharacteristic(UUIDS.wifi); }
+        catch (error) { if (error.name === 'NotFoundError') throw new Error('Update tag firmware to enable location scans.'); throw error; }
+        check();
+        await characteristic.writeValueWithResponse(Uint8Array.of(1, request & 255, request >> 8));
+        return characteristic;
+      }, 2500);
+      while (performance.now() < deadline) {
+        check();
+        const result = await this.performGatt(async () => { check(); return decodeWifiScan(await characteristic.readValue()); }, 2500);
+        check();
+        if (result.request === request) {
+          if (result.state === 'ready') return result.accessPoints;
+          if (result.state === 'failed') throw new Error('The tag could not complete its Wi-Fi scan. Try again.');
+          if (result.state === 'busy') throw new Error('The tag is busy. Wait 10 seconds, then update its location.');
+        }
+        await new Promise((resolve) => setTimeout(resolve, 200));
+      }
+      throw new Error('Wi-Fi scan timed out. Keep the tag nearby and try again.');
+    } finally { if (this.wifiScan === scan) this.wifiScan = null; }
   }
 
   settle(error, status) {
@@ -177,6 +216,7 @@ export class TagConnection {
     this.statusCharacteristic = null;
     this.service = null;
     this.signalCharacteristic = undefined;
+    this.wifiScan = null;
     this.gattTail = Promise.resolve();
     this.status = null;
     this.device = null;

@@ -3,6 +3,7 @@ export const UUIDS = Object.freeze({
   command: '7db10002-3a7e-4f5c-9b21-51c61a7e0001',
   status: '7db10003-3a7e-4f5c-9b21-51c61a7e0001',
   signal: '7db10004-3a7e-4f5c-9b21-51c61a7e0001',
+  wifi: '7db10005-3a7e-4f5c-9b21-51c61a7e0001',
 });
 
 export const STATES = ['OPEN_FREE', 'CLOSED_FREE', 'LOCKED_ASSIGNED', 'MOVING', 'FAULT'];

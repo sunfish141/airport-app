@@ -19,6 +19,10 @@ try {
   await phone.locator('#connection-pill').getByText('Connected', { exact: true }).waitFor();
   await phone.locator('#find').click();
   await phone.locator('#signal-label').getByText('Strong signal', { exact: true }).waitFor();
+  await phone.locator('#location-update').click();
+  await phone.locator('#location-status').getByText(/Simulated estimate · Accuracy radius: 80 m/).waitFor();
+  assert.match(await phone.locator('#location-map').getAttribute('href'), /43\.6777,-79\.6248/);
+  await phone.locator('#finder').screenshot({ path: join(artifacts, 'location.png') });
   await page.locator('.signal-tools summary').click();
   await page.locator('#signal-missing').check();
   await phone.locator('#signal-label').getByText('Signal unavailable', { exact: true }).waitFor();

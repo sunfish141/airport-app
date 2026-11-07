@@ -29,6 +29,7 @@ Rebuild and upload after changes. Rebuild the [browser simulation](simulation/RE
 - **Service open:** hold for 3 seconds. This bypasses pass matching; correct any obstruction or conflicting switches first.
 - **Optional LED:** slow blink during setup, faster blink on fault. **Flash light** flashes it for 2 seconds.
 - **Proximity:** the phone’s **Find tag** view reads connection signal strength from the tag. Re-upload after this update; older firmware continues to lock/release but cannot report signal strength.
+- **Wi-Fi estimate:** a connected phone may request a Wi-Fi scan. A separate worker returns nearby AP addresses/signals over BLE; the phone handles the location lookup. No Wi-Fi credentials are needed. Scans are refused during movement/setup, limited to one per 10 seconds, and invalidated on disconnect.
 
 Both endpoint contacts are required. Reboot preserves assignment; interrupted movement or invalid endpoint readings require recovery. Completion always depends on an endpoint contact, not elapsed servo time.
 

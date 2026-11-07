@@ -13,11 +13,19 @@ try {
   const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
   const errors = [];
   page.on('pageerror', (error) => errors.push(error.message));
+  await page.route('**/geolocate', async (route) => {
+    const payload = route.request().postDataJSON();
+    assert.equal(payload.wifiAccessPoints.length, 2);
+    assert.equal(payload.wifiAccessPoints[0].signalStrength, -55);
+    await route.fulfill({ json: { location: { lat: 43.6777, lng: -79.6248 }, accuracy: 80 } });
+  });
   await page.addInitScript(() => {
     const service = '7db10001-3a7e-4f5c-9b21-51c61a7e0001';
     const command = service.replace('0001-', '0002-');
     const status = service.replace('0001-', '0003-');
     const signal = service.replace('0001-', '0004-');
+    const wifi = service.replace('0001-', '0005-');
+    let wifiRequest = 0;
     const listeners = new Map();
     const events = [];
     const values = JSON.parse(localStorage.getItem('mock.tag') || 'null') || { state: 0, flags: 2, sequence: 1, command: '-', token: null, setupMs: 0, error: 0 };
@@ -36,7 +44,7 @@ try {
       listeners.get(`BluetoothLe:notification|tag-A|${service}|${status}`)?.({ value: packet() });
     }
     const mock = window.nativeTest = {
-      events, pass: 'A1B2C3D4E5F60718', reads: 0, scans: 0, active: true, rssi: -55,
+      events, pass: 'A1B2C3D4E5F60718', reads: 0, scans: 0, wifiScans: 0, active: true, rssi: -55,
       setup: () => emit({ setupMs: 10000, command: '-' }),
       drop: () => listeners.get('BluetoothLe:disconnected|tag-A')?.({ deviceId: 'tag-A' }),
       activeState: (active) => { mock.active = active; listeners.get('App:appStateChange')?.({ isActive: active }); },
@@ -91,12 +99,21 @@ try {
         if (method === 'requestDevice') { events.push(['choose', options]); return { deviceId: 'tag-A', name: 'Carry-NATIVE' }; }
         if (method === 'getDevices') { events.push(['restore', options.deviceIds]); return { devices: [{ deviceId: 'other-tag', name: 'Carry-NATIVE' }, { deviceId: 'tag-A' }] }; }
         if (method === 'connect') { events.push(['connect', options.deviceId]); if (options.deviceId !== 'tag-A') throw new Error('Wrong tag'); return {}; }
-        if (method === 'getServices') return { services: [{ uuid: service, characteristics: [command, status, signal].map((uuid) => ({ uuid })) }] };
+        if (method === 'getServices') return { services: [{ uuid: service, characteristics: [command, status, signal, wifi].map((uuid) => ({ uuid })) }] };
         if (method === 'read') {
+          if (options.characteristic === wifi) return { value: hex(Uint8Array.of(1, 2, wifiRequest & 255, wifiRequest >> 8, 2, 0,
+            0, 17, 34, 51, 68, 80, 201, 1, 0, 17, 34, 51, 68, 96, 192, 6)) };
           if (options.characteristic === signal) { ++mock.reads; return { value: hex(Uint8Array.of(1, 1, mock.rssi & 255, 0)) }; }
           return { value: packet() };
         }
         if (method === 'write') {
+          if (options.characteristic === wifi) {
+            const bytes = options.value.match(/../g).map((byte) => parseInt(byte, 16));
+            assertQr(bytes.length === 3 && bytes[0] === 1);
+            wifiRequest = bytes[1] | bytes[2] << 8;
+            ++mock.wifiScans;
+            return {};
+          }
           const text = String.fromCharCode(...options.value.match(/../g).map((byte) => parseInt(byte, 16)));
           events.push(['write', text]);
           const opcode = text[0];
@@ -136,8 +153,14 @@ try {
   await state('Bag locked');
   await page.locator('#find').click();
   await page.locator('#signal-label').getByText('Strong signal', { exact: true }).waitFor();
+  assert.equal(await page.evaluate(() => nativeTest.wifiScans), 0);
+  await page.locator('#location-update').click();
+  const configured = await page.evaluate(() => Boolean(carryPlatform.locate));
+  await page.locator('#location-status').getByText(configured ? /Accuracy radius: 80 m/ : /Location lookup is unavailable/).waitFor();
+  assert.equal(await page.evaluate(() => nativeTest.wifiScans), configured ? 1 : 0);
   const before = await page.evaluate(() => nativeTest.reads);
   await page.evaluate(() => nativeTest.activeState(false));
+  assert.equal(await page.locator('#location-map').isVisible(), false);
   await page.waitForTimeout(1200);
   assert.equal(await page.evaluate(() => nativeTest.reads), before);
   await page.evaluate(() => nativeTest.activeState(true));

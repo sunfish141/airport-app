@@ -7,3 +7,6 @@ __pycache__/
 .DS_Store
 mobile/node_modules/
 mobile/www/
+.env
+.env.local
+.env.*.local

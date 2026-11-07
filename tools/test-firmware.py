@@ -17,3 +17,10 @@ with tempfile.TemporaryDirectory(prefix="luggage-tests-") as directory:
         str(root / "firmware/test/controller_test.cpp"), "-o", executable,
     ], check=True)
     subprocess.run([executable], check=True)
+    wifi_executable = str(Path(directory) / "wifi-tests")
+    subprocess.run(compiler + [
+        "-std=c++11", "-Wall", "-Wextra", "-Werror", "-pedantic",
+        "-I", str(root / "firmware/include"),
+        str(root / "firmware/test/wifi_test.cpp"), "-o", wifi_executable,
+    ], check=True)
+    subprocess.run([wifi_executable], check=True)

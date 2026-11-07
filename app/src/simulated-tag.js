@@ -1,5 +1,6 @@
 import { UUIDS, STATES, ERRORS, normalizeToken } from './protocol.js';
 import { SimulatedSignal } from './simulated-signal.js';
+import { SimulatedWifi } from './simulated-wifi.js';
 
 // An opt-in, in-memory peripheral for the mobile preview. No real radio or NVS.
 export class SimulatedTag {
@@ -24,6 +25,7 @@ export class SimulatedTag {
     this.commandCharacteristic = { writeValueWithResponse: async (bytes) => this.receive(bytes) };
     this.device = new EventTarget();
     this.device.id = 'carry-javascript-demo';
+    this.wifi = new SimulatedWifi(() => this.device.gatt.connected);
     this.device.name = 'Carry-DEMO';
     this.device.gatt = {
       connected: false,
@@ -36,6 +38,7 @@ export class SimulatedTag {
             if (id === UUIDS.command) return this.commandCharacteristic;
             if (id === UUIDS.status) return this.statusCharacteristic;
             if (id === UUIDS.signal) return this.signalCharacteristic;
+            if (id === UUIDS.wifi) return this.wifi;
             throw new Error('Unknown simulated characteristic.');
           } };
         } };

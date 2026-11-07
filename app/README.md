@@ -39,6 +39,22 @@ After connecting, tap **Find tag**. Wait a few seconds, then walk slowly and fol
 
 Upload the latest firmware to enable readings. Closing the finder stops polling; readings older than 5 seconds are cleared. The finder resumes with fresh readings after reconnection. There is no tracking beyond Bluetooth range or while the page is in the background. Signal behavior still needs testing on your phone and board.
 
+## Wi-Fi location estimates
+
+While connected, open **Find tag → Estimate location**. The tag scans nearby Wi-Fi networks, sends their BSSIDs/signal readings over BLE, and the phone uses its internet connection to look them up. The tag never joins a Wi-Fi network. Updates are manual, at least 10 seconds apart; disconnecting, closing the finder or backgrounding the app discards pending results. Estimates show the provider's accuracy radius and an external Maps link, not an exact bag position.
+
+Real estimates require a [Google Geolocation API project/key](https://developers.google.com/maps/documentation/geolocation/get-api-key). Keep that key on the relay. From `app/`, with `GOOGLE_GEOLOCATION_API_KEY` set in your shell, run:
+
+```sh
+npm run location:relay
+```
+
+For browser development, copy `.env.example` to `.env` and restart `npm run dev`. Vite forwards `/api/geolocate` to the relay at `127.0.0.1:8787`. For the installed app, see [mobile configuration](../mobile/README.md#remember-and-find).
+
+The relay is a local prototype service: it binds only to loopback, limits updates and disables IP-based fallback, so it cannot accidentally locate the relay/phone instead of the tag. For remote use, integrate its handler into an authenticated HTTPS backend with the appropriate allowed app origins. No backend is deployed by these commands. Without service configuration, Bluetooth search and lock/release still work.
+
+Wi-Fi access-point addresses and signal readings go to the configured service; SSIDs, pass tokens and Wi-Fi passwords do not. Estimates depend on mapped access points and need physical airport testing. Both browser simulators use synthetic readings and a labelled demo estimate; they never send those demo readings to Google.
+
 ## Preview and checks
 
 From `app/`, use `npm run emulator` for the phone preview or `npm run simulate` for the [C++ firmware workbench](../firmware/simulation/README.md). In the emulator, scan a pass in the phone, then click **Setup button**.

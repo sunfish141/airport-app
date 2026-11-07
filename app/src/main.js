@@ -6,6 +6,8 @@ import { FirmwareTag } from './firmware-tag.js';
 import { LockIntent } from './lock-intent.js';
 import { Proximity } from './proximity.js';
 import { TagReconnect } from './tag-reconnect.js';
+import { TagLocation, createLocationClient } from './tag-location.js';
+import { simulatedLocation } from './simulated-wifi.js';
 import './style.css';
 
 const $ = (id) => document.getElementById(id);
@@ -33,6 +35,7 @@ let signalEpoch = 0;
 let signalTimer;
 let connectedTagName = '';
 let reconnect;
+let tagLocation;
 
 const errors = {
   TOKEN_MISMATCH: 'Wrong pass. Scan the pass used to lock this tag.',
@@ -67,6 +70,7 @@ const connection = new TagConnection({
   ...(simulation ? { bluetooth: simulation.bluetooth } : platform ? { bluetooth: platform.bluetooth, requireSecureContext: false } : {}),
   onStatus(status) {
     latest = status;
+    if (status.state === 'MOVING') tagLocation?.clear();
     setupDeadline = performance.now() + status.setupMs;
     if (status.state !== 'OPEN_FREE') released = false;
     if (status.state === 'OPEN_FREE' && status.error === 'NONE' && ['U', 'S'].includes(status.command)) released = true;
@@ -80,6 +84,7 @@ const connection = new TagConnection({
     $('connection-pill').textContent = connected ? 'Connected' : 'Disconnected';
     $('device-name').textContent = connected ? name : '';
     if (!connected) {
+      tagLocation?.clear();
       stopSignalSearch();
       latest = null;
       released = false;
@@ -96,6 +101,10 @@ const connection = new TagConnection({
     if (simulation) publishDemoStatus(simulation.snapshot());
     render();
   },
+});
+tagLocation = new TagLocation(connection, {
+  locate: simulation ? simulatedLocation : platform ? platform.locate : createLocationClient(import.meta.env.VITE_CARRY_LOCATION_ENDPOINT),
+  onChange: renderFinder,
 });
 let rememberedStorage = null;
 if (!simulation) { try { rememberedStorage = platform?.storage || localStorage; } catch { /* Same-page reconnection remains available. */ } }
@@ -185,6 +194,17 @@ function renderFinder() {
   $('finder-reconnect').hidden = connection.connected || reconnect?.searching;
   $('finder-stop').hidden = connection.connected || !reconnect?.searching;
   $('finder-flash').hidden = !connection.connected;
+  const result = tagLocation?.result;
+  $('location-update').disabled = !connection.connected || !isVisible() || Boolean(tagLocation?.busy) || Boolean(connection.wifiScan) || busy || Boolean(intent.pending) || latest?.state === 'MOVING' || latest?.setupMs > 0;
+  $('location-update').textContent = tagLocation?.busy ? 'Updating location…' : result ? 'Update location' : 'Estimate location';
+  $('location-message').hidden = !tagLocation?.message && !result;
+  const locationText = result
+    ? `${demoMode ? 'Simulated estimate · ' : ''}Accuracy radius: ${Math.ceil(result.accuracy)} m`
+    : tagLocation?.message || '';
+  if ($('location-status').textContent !== locationText) $('location-status').textContent = locationText;
+  $('location-age').textContent = result ? ` · ${Math.max(0, Math.floor((Date.now() - result.at) / 1000))}s ago` : '';
+  $('location-map').hidden = !result;
+  if (result) $('location-map').href = `https://www.google.com/maps/search/?api=1&query=${result.location.lat},${result.location.lng}`;
 }
 function stopSignalSearch() { ++signalEpoch; clearTimeout(signalTimer); }
 function startSignalSearch() {
@@ -332,7 +352,8 @@ $('storage').addEventListener('click', () => { $('tag-options').close(); void ru
 $('flash').addEventListener('click', () => { $('tag-options').close(); void run('F'); });
 $('find').addEventListener('click', openFinder);
 $('find-in-options').addEventListener('click', openFinder);
-$('finder').addEventListener('close', stopSignalSearch);
+$('finder').addEventListener('close', () => { stopSignalSearch(); tagLocation.clear(); });
+$('location-update').addEventListener('click', () => void tagLocation.refresh());
 $('finder-flash').addEventListener('click', async () => { await run('F'); $('finder-message').textContent = $('notice').textContent; });
 $('finder-reconnect').addEventListener('click', () => { $('finder').close(); $('connect').click(); });
 $('finder-stop').addEventListener('click', () => reconnect.stop());
@@ -354,13 +375,13 @@ function visibilityChanged() {
     // Android's native scanner opens a camera Activity. Its result still
     // belongs to this scan; a disconnect or explicit cancel invalidates it.
     if (!platform?.scanning) stopScanner();
-    intent.clear(); stopSignalSearch(); render();
+    intent.clear(); stopSignalSearch(); tagLocation.clear(); render();
   }
   else if ($('finder').open) startSignalSearch();
 }
 if (platform) platform.onVisibility(visibilityChanged);
 else document.addEventListener('visibilitychange', visibilityChanged);
-window.addEventListener('pagehide', () => { intent.clear(); stopSignalSearch(); stopScanner(); reconnect.setVisible(false); connection.disconnect(); simulation?.dispose(); });
+window.addEventListener('pagehide', () => { intent.clear(); stopSignalSearch(); tagLocation.clear(); stopScanner(); reconnect.setVisible(false); connection.disconnect(); simulation?.dispose(); });
 setInterval(render, 200);
 
 if (simulation) {

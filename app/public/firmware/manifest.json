@@ -8,7 +8,7 @@
     "tools/build-firmware-wasm.py",
     "firmware/include/BoardConfig.h"
   ],
-  "sourceHash": "7f354d2f83754db469b7746ddd571adab4b0d96ebd36e7cb1d933276d61c898e",
+  "sourceHash": "4bfb69e8f3e0a32b13d8a34d734018cd6eea49ca65904eac679e41681b25b882",
   "wasmHash": "a09c36777c97c1a3c7d6be4b8d152ba47119f8c264919f2d8118d0481cfeb304",
   "compiler": "Zig 0.14.1 C++",
   "target": "wasm32-wasi",

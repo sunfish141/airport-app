@@ -22,11 +22,17 @@ function fixture(t) {
     connect: async (id, onDisconnect) => { calls.push(['connect', id]); dropped = onDisconnect; tag.device.gatt.connected = true; },
     disconnect: async () => { tag.device.gatt.connected = false; },
     getServices: async () => [{ uuid: UUIDS.service.toUpperCase(), characteristics: Object.values(UUIDS).slice(1).map((uuid) => ({ uuid })) }],
-    read: async (id, service, characteristic) => characteristic === UUIDS.signal ? tag.signal.packet() : tag.packet(),
+    read: async (id, service, characteristic) => characteristic === UUIDS.wifi ? tag.wifi.readValue() : characteristic === UUIDS.signal ? tag.signal.packet() : tag.packet(),
     write: async (id, service, characteristic, value) => {
-      assert.equal(id, 'tag-A'); assert.equal(service, UUIDS.service); assert.equal(characteristic, UUIDS.command);
+      assert.equal(id, 'tag-A'); assert.equal(service, UUIDS.service);
       assert.ok(value instanceof DataView);
       const bytes = new Uint8Array(value.buffer, value.byteOffset, value.byteLength);
+      if (characteristic === UUIDS.wifi) {
+        calls.push(['wifi-scan']);
+        await tag.wifi.writeValueWithResponse(bytes); tag.wifi.started = -Infinity;
+        return;
+      }
+      assert.equal(characteristic, UUIDS.command);
       calls.push(['write', new TextDecoder().decode(bytes)]);
       tag.receive(bytes);
     },
@@ -54,6 +60,17 @@ test('native BLE uses shared command confirmation, wrong-pass rejection and sign
   assert.deepEqual(calls.filter(([type]) => type === 'write').map(([, value]) => value), [
     'L' + DEMO_TOKENS[0], 'U' + DEMO_TOKENS[1], 'U' + DEMO_TOKENS[0],
   ]);
+});
+
+test('native location scans are requested separately and return the tag’s Wi-Fi readings', async (t) => {
+  const { connection, calls } = fixture(t);
+  await connection.connect();
+  assert.equal(calls.some(([type]) => type === 'wifi-scan'), false);
+  assert.equal((await connection.scanWifi()).length, 2);
+  assert.equal(calls.filter(([type]) => type === 'wifi-scan').length, 1);
+  assert.equal(calls.some(([type]) => type === 'write'), false);
+  connection.disconnect();
+  await assert.rejects(connection.scanWifi(), /Connect/);
 });
 
 test('native app restores the exact saved ID without a chooser or name matching', async (t) => {

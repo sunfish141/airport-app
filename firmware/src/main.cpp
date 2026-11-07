@@ -11,6 +11,7 @@
 #include "Config.h"
 #include "Controller.h"
 #include "BoardConfig.h"
+#include "WifiScanner.h"
 
 #if !defined(CONFIG_IDF_TARGET_ESP32)
 #error "Use the esp32_wroom32 PlatformIO environment for the purchased ESP-WROOM-32 board."
@@ -81,7 +82,7 @@ class Signal : public NimBLECharacteristicCallbacks {
   }
 } signalCallbacks;
 class ServerCallbacks : public NimBLEServerCallbacks {
-  void onDisconnect(NimBLEServer*, NimBLEConnInfo&, int) override { NimBLEDevice::startAdvertising(); }
+  void onDisconnect(NimBLEServer*, NimBLEConnInfo&, int) override { location::disconnected(); NimBLEDevice::startAdvertising(); }
 } serverCallbacks;
 
 void sample(uint32_t now) {
@@ -131,6 +132,7 @@ void setup() {
   signalCharacteristic->setCallbacks(&signalCallbacks);
   const uint8_t noSignal[] = {1, 0, 0, 0};
   signalCharacteristic->setValue(noSignal, sizeof(noSignal));
+  location::begin(service);
   controller.begin(record, result, {openInput.pressed(), closedInput.pressed()}, millis());
   service->start();
   auto* advertising = NimBLEDevice::getAdvertising();
@@ -148,6 +150,7 @@ void loop() {
   // One command per loop keeps switch monitoring and service recovery responsive.
   if (xQueueReceive(commandQueue, &message, 0) == pdTRUE) controller.command(message.bytes, message.length, now);
   if (overflow.exchange(false)) controller.rejectBusy(now);
+  location::allowScan(controller.status().state != tag::State::Moving && controller.status().setupMs == 0 && !buttonInput.pressed());
   if (flashing && uint32_t(now - flashStarted) >= 2000) flashing = false;
   const bool fault = controller.status().state == tag::State::Fault;
   const bool setup = controller.status().setupMs > 0;

@@ -28,6 +28,11 @@
 	<string>Carry connects to your luggage tag to lock, release and find it nearby.</string>
 	<key>NSCameraUsageDescription</key>
 	<string>Carry scans your demo pass to lock or release your luggage tag.</string>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+	</dict>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

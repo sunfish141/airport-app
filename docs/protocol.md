@@ -10,6 +10,7 @@ Reference for custom clients. Normal testing uses the [mobile app](../mobile/REA
 | Command | `7db10002-3a7e-4f5c-9b21-51c61a7e0001` | Write with response |
 | Status | `7db10003-3a7e-4f5c-9b21-51c61a7e0001` | Read, notify |
 | Signal | `7db10004-3a7e-4f5c-9b21-51c61a7e0001` | Read; optional on older firmware |
+| Wi-Fi scan | `7db10005-3a7e-4f5c-9b21-51c61a7e0001` | Read/write with response; optional |
 
 ## Commands
 
@@ -56,3 +57,11 @@ The app waits 5 seconds. A disconnect or missing result requires reconnect/readb
 Reading Signal queries RSSI for the requesting phone’s connection using NimBLE `ble_gap_conn_rssi`. Its independent 4-byte response is `[version=1, valid=0/1, signed RSSI in dBm, reserved=0]`. Accept RSSI only when valid is 1 and the value is −127 through +20; HCI’s +127 unavailable sentinel is never valid. This is signal received by the tag, not a distance or position measurement.
 
 The finder reads about once per second while visible. It requires 3 valid readings, uses a 5-sample median plus smoothing, and gives bands with 3 dB hysteresis. A sustained change of at least 5 dB gives stronger/weaker guidance; noisy samples suppress that trend. After 5 seconds without valid data, clear the indication. Reads/writes are serialized, with reads skipped during pending commands and a 2.5-second read timeout. These packets never confirm an actuator command. Missing Signal support leaves lock/release available.
+
+## Connected Wi-Fi scan
+
+Write `[version=1, requestId uint16 LE]` to Wi-Fi scan, then poll its value. Response: `[version=1, state, requestId uint16 LE, count, reserved=0]`, followed by `count` records of `[BSSID 6 bytes, signed RSSI int8, channel uint8]`. States: `0 idle`, `1 scanning`, `2 ready`, `3 failed`, `4 busy`. Only ready responses contain records, up to 12; length is exactly `6 + 8×count`. Match the current request ID and BLE session. These packets never acknowledge motor commands.
+
+The core-0 worker performs an asynchronous scan only after a connected peer writes a request. It keeps the strongest unique globally administered unicast BSSIDs, excludes zero/IANA addresses, and sends no SSIDs. Scans are limited to one per 10 seconds, refused during movement/setup and invalidated on disconnect. Wi-Fi is off between scans; there is no network association or HTTP on the tag. One controlling phone is supported; other peers cannot read the requesting peer's snapshot.
+
+The client bounds scanning to 8 seconds and each GATT operation to 2.5 seconds. It stops on background/close/disconnect, validates readings, requires at least two usable APs and sends them to a phone-side location relay with IP fallback disabled. Lookup results remain in memory only. The app clears them on disconnect/background/close and displays the provider's radius and age. A map link represents the estimate's center, not a measured bag position. Missing scan support does not disable lock/release.

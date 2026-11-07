@@ -1,6 +1,7 @@
 import { UUIDS } from './protocol.js';
 import { FirmwareMachine } from './firmware-machine.js';
 import { SimulatedSignal } from './simulated-signal.js';
+import { SimulatedWifi } from './simulated-wifi.js';
 
 const STORAGE_KEY = 'carry.firmware-workbench.v1';
 
@@ -26,6 +27,7 @@ export class FirmwareTag {
     } };
     this.device = new EventTarget();
     this.device.id = 'carry-firmware-demo';
+    this.wifi = new SimulatedWifi(() => this.device.gatt.connected);
     this.device.name = 'Carry-FIRMWARE';
     this.device.gatt = {
       connected: false,
@@ -40,6 +42,7 @@ export class FirmwareTag {
             if (id === UUIDS.status) return this.statusCharacteristic;
             if (id === UUIDS.command) return this.commandCharacteristic;
             if (id === UUIDS.signal) return this.signalCharacteristic;
+            if (id === UUIDS.wifi) return this.wifi;
             throw new Error('Unknown firmware characteristic.');
           } };
         } };

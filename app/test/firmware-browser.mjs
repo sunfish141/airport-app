@@ -25,6 +25,9 @@ try {
   await phone.locator('#connection-pill').getByText('Connected', { exact: true }).waitFor();
   await phone.locator('#find').click();
   await phone.locator('#signal-label').getByText('Strong signal', { exact: true }).waitFor();
+  await phone.locator('#location-update').click();
+  await phone.locator('#location-status').getByText(/Simulated estimate · Accuracy radius: 80 m/).waitFor();
+  assert.match(await phone.locator('#location-map').getAttribute('href'), /43\.6777,-79\.6248/);
   await page.locator('summary').getByText('Bluetooth signal test', { exact: true }).click();
   await page.locator('#signal-level').evaluate((element) => { element.value = '-100'; element.dispatchEvent(new Event('input', { bubbles: true })); });
   await phone.locator('#signal-label').getByText('Very weak signal', { exact: true }).waitFor();

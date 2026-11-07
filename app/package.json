@@ -8,6 +8,7 @@
   },
   "scripts": {
     "dev": "vite --host 127.0.0.1",
+    "location:relay": "node server/location-relay.js",
     "emulator": "vite --host 127.0.0.1 --open /emulator.html",
     "presimulate": "npm run firmware:check",
     "simulate": "vite --host 127.0.0.1 --open /simulation.html",

@@ -60,6 +60,10 @@ h1 { font-size: 32px; line-height: 1.2; letter-spacing: -1px; font-weight: 650; 
 .signal-trend { min-height: 40px; font-size: 14px; line-height: 1.6; text-align: center; color: var(--muted); margin-top: 12px; }
 .signal-reading { min-height: 18px; text-align: center; color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; margin-top: 8px; }
 .finder-hint { font-size: 12px; line-height: 1.7; color: var(--muted); margin: 24px 0; }
+.location-tools { border-top: 1px solid var(--line); padding: 16px 0; margin-bottom: 8px; }
+.location-update { min-height: 44px; background: white; border: 1px solid var(--line); border-radius: 7px; color: var(--accent); width: 100%; font-size: 14px; }
+.location-update:disabled { color: var(--muted); }
+#location-message { font-size: 12px; color: var(--muted); line-height: 1.6; margin-top: 10px; }
 .setup-line { font-size: 11px; line-height: 1.5; color: var(--muted); margin-top: 13px; }
 .notice { font-size: 13px; line-height: 1.6; color: var(--accent); margin-top: 20px; }
 .notice.error { color: #a1402b; }

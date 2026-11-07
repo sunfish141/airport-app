@@ -3,6 +3,7 @@ import { fileURLToPath } from 'node:url';
 import { checkFirmwareBuild } from './scripts/check-firmware-build.js';
 
 export default defineConfig({
+  server: { proxy: { '/api/geolocate': { target: 'http://127.0.0.1:8787', rewrite: () => '/geolocate' } } },
   plugins: [{
     name: 'firmware-source-check',
     configureServer(server) {
