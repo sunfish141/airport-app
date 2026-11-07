@@ -1,158 +1,49 @@
-# Luggage tag MVP — implementation guide
+# Single-tag prototype: wiring and testing
 
-One battery-powered BLE tag with a servo-driven bolt, phone QR scanning, and reusable assignments. Proposed design; hardware and software require bench validation.
+Use the purchased ESP-WROOM-32 board, one SG90 servo and tactile buttons. The phone selects the tag over Bluetooth; no NFC tapping is needed. [Parts list](list.md).
 
-## 1. Operation
+## Power
 
-1. Insert the cable eyelet into the bolt guide.
-2. Activate setup and scan a demo boarding-pass QR. The tag stores its token and closes the bolt.
-3. A matching token opens the bolt; a different token is rejected.
-4. The open-position switch confirms release before the tag clears its assignment.
-5. **Close for storage** closes an unassigned tag without scanning. The service button reopens it.
+For bench testing, power the ESP32 through USB-C and the servo from a separate regulated 5 V supply. Join their grounds. Do not connect that external 5 V rail to the USB-powered board, its 3V3 pin, or any GPIO.
 
-Token comparison runs on the tag. Tokens are copyable/replayable; the service button bypasses ownership. Advertise only the tag ID, never the token or passenger information.
+If using the LM2596, feed it a suitable DC source above its 5 V output with sufficient headroom. Measure and set its output before connecting the servo. It is a step-down regulator and cannot boost one 18650 cell to 5 V. The supply and wiring must handle motor startup/load without voltage drops. [TI reference](https://www.ti.com/product/LM2596).
 
-## 2. Parts
+## Wiring
 
-| Qty | Component | Specification |
-|---:|---|---|
-| 1 | XIAO ESP32C3 | Attach supplied antenna |
-| 1 | SG90 positional servo | Include horn and screw; not continuous rotation |
-| 1 | Protected 18650 cell | 3.6/3.7 V nominal, approximately 3,000–3,500 mAh, documented discharge rating ≥5 A |
-| 1 | Battery holder | Fits actual protected-cell length, approximately 69–70 mm; contacts ≥5 A |
-| 1 | 5 V boost converter | Pololu U3V40F5; validate servo startup plus controller load at low battery voltage |
-| 1 | Main switch | ≥5 A DC |
-| 1 | Fuse and holder | 5 A; install near battery positive |
-| 1 | Schottky diode | 1N5819, controller supply branch |
-| 2 | NO lever microswitches | Bolt-open and bolt-closed detection |
-| 1 | NO momentary button | Setup and service override |
-| 1 each | LED and resistor | 1 kΩ series resistor |
-| 1 | Electrolytic capacitor | 1,000 µF, ≥10 V, servo supply |
-| 1 | Electrolytic capacitor | 100 µF, ≥10 V, boost input |
-| 1 | Ceramic capacitor | 100 nF, servo supply |
-| 1 set | Perfboard, connectors, wire, heat-shrink | Short 20 AWG power leads; thinner signal wires |
-| 1 | Steel cable with eyelets | Pre-terminated, or use matching ferrules and crimp tool |
-| 1 set | Printed parts | Base, two bolt guides, servo bracket, lid |
-| 1 set | Mechanical hardware | Approximately 3 mm steel bolt/rod, linkage, screws, washers, nuts |
-| 1 shared | Li-ion charger | Compatible with protected cell; remove cell to charge |
-| 1 | USB-C data cable | Programming |
-| If needed | SN74AHCT125N, DIP socket, 100 nF capacitor | Servo signal conversion from 3.3 V to 5 V |
-
-Tools: soldering iron, multimeter, calipers, screwdrivers, cutter, printer and filament; preferably a current-limited bench supply.
-
-## 3. Wiring
+Use the board’s GPIO labels, not physical header positions. These match [BoardConfig.h](firmware/include/BoardConfig.h).
 
 | Connection | Destination |
-|---|---|
-| Battery positive | Fuse → main switch → boost VIN |
-| Battery negative | Common GND: boost, XIAO, servo and switches |
-| Boost 5 V | Servo positive and 1N5819 anode |
-| 1N5819 cathode, banded end | XIAO **5 V** pin; leave BAT pads unused |
-| Servo signal | D10 / GPIO10 |
-| Open switch | COM → GND; NO → D3 / GPIO5 |
-| Closed switch | COM → GND; NO → D4 / GPIO6 |
-| Setup/service button | GND and D5 / GPIO7 |
-| LED | D6 / GPIO21 → 1 kΩ → anode; cathode → GND |
-| 1,000 µF and 100 nF | Servo 5 V to GND, close to connector |
-| 100 µF | Boost VIN to GND, close to converter |
+| --- | --- |
+| Servo signal | GPIO25 |
+| Servo positive | Regulated 5 V servo supply |
+| Servo ground | Common GND with ESP32 and supply |
+| Open endpoint switch | GPIO32 to GND when fully open |
+| Closed endpoint switch | GPIO33 to GND when fully closed |
+| Setup/service button | GPIO27 to GND while pressed |
+| Optional LED | GPIO26 → 1 kΩ resistor → LED anode; cathode → GND |
 
-Configure switches/button as `INPUT_PULLUP`: pressed = LOW. Observe electrolytic polarity. Route servo power and return directly to the supply junction, not through the XIAO or solderless breadboard. Disconnect battery power before USB programming; unplug USB before battery operation. [1]
+Inputs use internal pull-ups: closing a switch pulls its GPIO LOW. Never apply 5 V to a GPIO. On each four-leg tactile button, choose one leg from each internally connected pair; verify that continuity occurs only when pressed. [ESP32 pin reference](https://documentation.espressif.com/esp32-wroom-32_datasheet_en.html).
 
-Test the purchased servo with 3.3 V PWM. If unreliable or incompatible, add the AHCT125 buffer: pin 14 → 5 V; 7 → GND; 1 → GND; D10 → 2; 3 → servo signal. Add 100 nF across 14/7. Tie unused inputs 5/9/12 to GND and enables 4/10/13 to 5 V; leave outputs 6/8/11 disconnected. Check DIP orientation. [4]
+## Bench test with the purchased buttons
 
-## 4. Mechanical assembly
+Without endpoint switches, use two spare tactile buttons on GPIO32 and GPIO33 to simulate them. These indicate positions manually; they do not prove that the servo moved.
 
-Use a sliding steel bolt through the removable cable eyelet. Support it on both sides with printed guides; attach the cable's fixed eyelet to the base with a bolt, washers and nut. Cable load must transfer into the guides/base rather than the servo gears.
+1. [Upload the firmware](firmware/README.md) and [start the app](app/README.md).
+2. Hold only the open-position button while powering the tag. Keep it held until closing starts.
+3. Connect to `Carry-XXXXXX`, scan demo pass A, then hold the setup button for ½ second and release before 3 seconds.
+4. When closing starts, release the open button and press/hold the closed button before the movement timeout (initially 1 second). Wait for **Bag locked**.
+5. Scan pass B: it must be rejected. Scan A: when opening starts, release closed and press/hold open before the timeout. Wait for **Bag released**.
 
-1. Print the base, guides and servo bracket.
-2. Fit the bolt and remove friction by hand.
-3. Centre the servo before attaching its horn.
-4. Couple the horn to the bolt using a short linkage or horn pin in a slotted slider.
-5. Calibrate open/closed travel without hitting the servo's internal stops.
-6. Mount endpoint switches to trigger before binding. Add separate mechanical stops.
-7. Provide a removable linkage pin for manual release.
+Do not assert both endpoints together. With neither endpoint connected at boot, the tag correctly enters recovery.
 
-The mechanism closes by servo command; it does not snap closed automatically.
+## Fit the mechanism
 
-## 5. Firmware
+Test the servo unloaded first, including its response to the ESP32’s 3.3 V signal. Fit a freely moving bolt through the cable eyelet; the base and guides must carry the cable load. Add endpoint contacts, travel stops and a manual way to release the linkage.
 
-Use Arduino, the ESP32 board package, NimBLE-Arduino, and Preferences/NVS. Start from a basic BLE GATT server. [5]
+Calibrate `OPEN_PULSE_US` and `CLOSED_PULSE_US` in [BoardConfig.h](firmware/include/BoardConfig.h). The initial 1400/1600 µs pulses are starting values, not calibrated positions. Adjust `MOVEMENT_TIMEOUT_MS` in [Config.h](firmware/include/Config.h) to measured travel. Rebuild and upload after changes.
 
-Expose one writable command characteristic and one readable/notifiable status characteristic. Commands are one ASCII opcode followed by the payload, without a terminator; maximum length is 17 bytes.
+## Recovery and checks
 
-| Opcode | Payload | Validation/action |
-|---|---|---|
-| `L` | 16 ASCII hexadecimal characters | Require unassigned, bolt open, setup window active. Persist token, then close |
-| `U` | 16 ASCII hexadecimal characters | Require matching stored token; open |
-| `C` | None | Require unassigned and bolt open; close for storage |
-| `F` | None | Optional bounded LED flash |
+For a jam, switch off servo power before clearing it. Once clear and powered, hold the setup/service button for 3 seconds to request opening. This bypasses the pass check. The app confirms release only when the open contact is active; with bench buttons, supply that input yourself. Correct conflicting endpoint inputs first.
 
-Reject malformed lengths/tokens, unknown commands and movement requests while busy. Return state/error notifications; never report success from receipt of a command alone.
-
-| State | Meaning |
-|---|---|
-| `OPEN_FREE` | Open switch active; no assignment |
-| `CLOSED_FREE` | Closed switch active; no assignment |
-| `LOCKED_ASSIGNED` | Closed switch active; token stored |
-| `MOVING` | Endpoint transition in progress |
-| `FAULT` | Timeout, conflicting sensors or unresolved persisted state |
-
-Implementation rules:
-
-- Debounce inputs for approximately 30 ms. Both endpoint switches active is a fault; neither active does not prove opening.
-- Persist assignment and pending movement before actuation. Confirm closed with the closed switch; clear assignment only after confirmed opening.
-- Use calibrated servo pulses at 50 Hz. Begin near 1.5 ms centre and expand travel cautiously within the servo's limits. [2]
-- Set an initial movement timeout around one second, adjusted to measured travel. On timeout, stop PWM, retain assignment, report `FAULT`, and do not retry automatically.
-- PWM removal may not stop motor current. If the servo continues pushing/buzzing, turn off the main switch and free the mechanism; this circuit has no automatic motor-power cutoff.
-- A short button hold while unassigned starts a 10-second setup window. A three-second hold requests service opening, once per press, from any state. Clear assignment only after confirmed opening.
-- On boot, reconcile NVS and switches. Preserve ownership; interrupted or contradictory states require service recovery.
-
-## 6. Phone interface
-
-Use React or plain JavaScript on **Android Chrome over HTTPS**. Web Bluetooth device selection requires a user gesture. Test the actual phone first; a plain HTTP LAN address does not satisfy the secure-origin requirement. [6]
-
-1. Implement **Connect** using the tag's BLE service UUID.
-2. Subscribe to status and handle disconnects.
-3. Use `@zxing/browser` for camera QR decoding. [7]
-4. Print two demo QR passes containing distinct 16-character hexadecimal tokens.
-5. **Scan to lock:** validate token format, then write `L` + token.
-6. **Scan to unlock:** write `U` + token; authorization remains in firmware.
-7. **Close for storage:** write `C`.
-8. Display confirmed state and errors. Add `F` only if time permits.
-
-Use one consistent token case, such as uppercase, on both devices. Use synthetic QR passes; real airline barcode parsing is outside this implementation.
-
-## 7. Build sequence
-
-| Stage | Work | Exit check |
-|---|---|---|
-| Day 1: setup | Upload firmware; connect phone to BLE service | Read and write a test value |
-| Day 1: power | Assemble power wiring; measure rails before connecting loads | Stable 5 V; correct polarity; no shorts |
-| Day 1: actuator | Test unloaded servo, then printed bolt and switches | Cable retained/released without resets or binding |
-| Day 1: control | Implement commands, token comparison and NVS | Matching token opens; wrong token fails |
-| Day 2: interface | Add QR camera, state display, setup and reuse | Complete scan → lock → unlock → clear loop |
-| Day 2: integration | Secure wiring, install battery and lid | Untethered operation with enclosure closed |
-| Day 2: validation | Run acceptance tests | Repeatable demonstration |
-
-Before first battery operation, verify the converter supports motor startup plus controller load at the intended minimum battery voltage. A converter's switch/input-current rating is not its output-current rating. [3]
-
-## 8. Acceptance tests
-
-- Twenty lock/unlock cycles without jams or resets.
-- Wrong token rejected without changing assignment.
-- Correct token clears assignment only after open-switch confirmation.
-- Close for storage and service reopening work without rescanning.
-- Reassignment accepts the new token and rejects the old one.
-- Reboot preserves ownership and does not unlock automatically.
-- Obstruction produces a timeout/fault without automatic retries; manual recovery works.
-- Battery-powered operation lasts through the planned demo; verify battery voltage and supply stability under motor load.
-
-## References
-
-1. [XIAO ESP32C3 pinout and power](https://wiki.seeedstudio.com/XIAO_ESP32C3_Getting_Started/)
-2. [SG90 specifications](https://towerpro.com.tw/product/sg90-7/)
-3. [U3V40F5 converter](https://www.pololu.com/product/4012)
-4. [SN74AHCT125 datasheet](https://www.ti.com/lit/ds/symlink/sn74ahct125.pdf)
-5. [NimBLE-Arduino server guide](https://github.com/h2zero/NimBLE-Arduino/blob/master/docs/New_user_guide.md)
-6. [Chrome Web Bluetooth](https://developer.chrome.com/docs/capabilities/bluetooth)
-7. [ZXing browser](https://github.com/zxing-js/browser)
+Before a demonstration, check repeated lock/release cycles, wrong-pass rejection, storage closing, service opening, and reconnecting after a reboot. Rebooting must not clear a locked assignment. Interrupted movement requires recovery. This is a functional prototype, not a tamper-resistant lock.
