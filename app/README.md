@@ -16,10 +16,11 @@ The printed localhost URL is for the computer running the server. For a phone, r
 
 ## Lock and release
 
-1. Start with the tag open and its open endpoint active. Tap **Connect tag** and select `Carry-XXXXXX`.
-2. Insert the cable, tap **Scan to lock**, and scan demo pass A.
-3. When prompted, hold the tag button for ½ second and release before 3 seconds. Wait for **Bag locked**.
-4. Tap **Scan to release** and scan A again. Remove the cable after **Bag released**.
+The tag opens on startup. Position is assumed from timing; D32/D33 and the setup hold are not required.
+
+1. Tap **Connect tag** and select `Carry-XXXXXX`. Wait for startup opening.
+2. Insert the cable, tap **Scan to lock**, and scan demo pass A. Wait half a second for **Bag locked**.
+3. Tap **Scan to release** and scan A again. Remove the cable after **Bag released**.
 
 Print passes from `/demo-passes.html`, also linked under **Tag options** (···). Pass B checks rejection of a wrong pass. For manual entry, A is `A1B2C3D4E5F60718`; B is `9A8B7C6D5E4F3021`.
 
@@ -35,7 +36,7 @@ After a page reload, restoration uses `getDevices()` when the browser supports i
 
 ## Find the tag
 
-After connecting, tap **Find tag**. Wait a few seconds, then walk slowly and follow **Getting stronger**. The app smooths the tag’s Bluetooth signal readings; bands indicate link strength, not meters or a direction. **Flash light** confirms the tag visually if an external LED is fitted. Signal search itself needs no extra hardware.
+After connecting, tap **Find tag**. Wait a few seconds, then walk slowly and follow **Getting stronger**. The app smooths the tag’s Bluetooth signal readings; bands indicate link strength, not meters or a direction. Signal search itself needs no extra hardware.
 
 Upload the latest firmware to enable readings. Closing the finder stops polling; readings older than 5 seconds are cleared. The finder resumes with fresh readings after reconnection. There is no tracking beyond Bluetooth range or while the page is in the background. Signal behavior still needs testing on your phone and board.
 
@@ -43,7 +44,7 @@ Upload the latest firmware to enable readings. Closing the finder stops polling;
 
 While connected, open **Find tag → Estimate location**. The tag scans nearby Wi-Fi networks, sends their BSSIDs/signal readings over BLE, and the phone uses its internet connection to look them up. The tag never joins a Wi-Fi network. Updates are manual, at least 10 seconds apart; disconnecting, closing the finder or backgrounding the app discards pending results. Estimates show the provider's accuracy radius and an external Maps link, not an exact bag position.
 
-Real estimates require a [Google Geolocation API project/key](https://developers.google.com/maps/documentation/geolocation/get-api-key). Keep that key on the relay. From `app/`, with `GOOGLE_GEOLOCATION_API_KEY` set in your shell, run:
+The installed [Android app](../mobile/README.md#remember-and-find) supports direct native lookup without a relay or USB cable. Browser/iOS estimates use a relay with a [Google Geolocation API project/key](https://developers.google.com/maps/documentation/geolocation/get-api-key). Copy `server/.env.example` to `server/.env.local` and set `GOOGLE_GEOLOCATION_API_KEY` there. This private file is excluded from Git. From `app/`, run:
 
 ```sh
 npm run location:relay

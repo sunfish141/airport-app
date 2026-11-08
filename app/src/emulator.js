@@ -27,7 +27,7 @@ window.addEventListener('message', (event) => {
   snapshot = event.data.status;
   $('virtual-state').textContent = labels[snapshot.state] || 'Waiting for app';
   $('virtual-connection').textContent = `${snapshot.connected ? 'Connected' : 'Disconnected'} · ${snapshot.assigned ? 'Pass assigned' : 'No assignment'}`;
-  $('virtual-led').className = snapshot.flashing ? 'flashing' : snapshot.state === 'FAULT' ? 'fault' : '';
+  $('tag-status-dot').className = snapshot.state === 'FAULT' ? 'fault' : '';
   $('demo-connect').textContent = snapshot.connected ? 'Disconnect virtual tag' : 'Connect virtual tag';
   $('demo-setup').disabled = snapshot.state !== 'OPEN_FREE';
   $('obstruction').checked = Boolean(snapshot.obstructed);

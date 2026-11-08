@@ -34,15 +34,18 @@ export function decodeStatus(value) {
   const error = ERRORS[view.getUint8(2)];
   const flags = view.getUint8(3);
   const command = String.fromCharCode(view.getUint8(10));
-  if (!state || !error || flags > 7 || view.getUint8(11) !== 0 || !'-LUCFS'.includes(command)) {
+  const timedDemo = view.getUint8(11) === 1;
+  if (!state || !error || flags > 7 || view.getUint8(11) > 1 || !'-LUCFS'.includes(command)) {
     throw new Error('Invalid tag status packet.');
   }
   const result = {
     state, error, assigned: Boolean(flags & 1), open: Boolean(flags & 2), closed: Boolean(flags & 4),
     setupMs: view.getUint16(4, true), sequence: view.getUint32(6, true), command,
   };
+  if (timedDemo) result.timedDemo = true;
   const expectedFlags = { OPEN_FREE: 2, CLOSED_FREE: 4, LOCKED_ASSIGNED: 5 }[state];
-  if ((expectedFlags !== undefined && flags !== expectedFlags) || result.setupMs > 10000) {
+  const assignedConflict = expectedFlags !== undefined && result.assigned !== Boolean(expectedFlags & 1);
+  if ((timedDemo ? assignedConflict : expectedFlags !== undefined && flags !== expectedFlags) || result.setupMs > 10000) {
     throw new Error('Tag state conflicts with its confirmed switch readings.');
   }
   return result;

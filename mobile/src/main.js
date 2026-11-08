@@ -1,4 +1,4 @@
-import { Capacitor, CapacitorHttp } from '@capacitor/core';
+import { Capacitor, CapacitorHttp, registerPlugin } from '@capacitor/core';
 import { App } from '@capacitor/app';
 import { Preferences } from '@capacitor/preferences';
 import { BleClient } from '@capacitor-community/bluetooth-le';
@@ -6,6 +6,7 @@ import { CapacitorBarcodeScanner, CapacitorBarcodeScannerTypeHint } from '@capac
 import { NativeBluetooth } from './bluetooth.js';
 import { createTagStorage, TAG_KEY } from './preferences.js';
 import { createLocationClient } from '../../app/src/tag-location.js';
+import { createNativeLocationClient } from './location.js';
 import './style.css';
 
 async function start() {
@@ -18,7 +19,9 @@ async function start() {
   });
   const platform = {
     storage,
-    locate: createLocationClient(import.meta.env.VITE_CARRY_LOCATION_ENDPOINT, {
+    locate: Capacitor.getPlatform() === 'android'
+      ? createNativeLocationClient(registerPlugin('CarryLocation'))
+      : createLocationClient(import.meta.env.VITE_CARRY_LOCATION_ENDPOINT, {
       fetchImpl: async (url, options) => {
         // Native HTTP permits the optional USB loopback relay without WebView
         // mixed-content/CORS workarounds. HTTPS uses cancellable normal fetch.

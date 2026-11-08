@@ -4,6 +4,8 @@ One ESP-WROOM-32 tag, an SG90 servo, and a phone. Select `Carry-XXXXXX` over Blu
 
 Use the [native Android/iOS app](mobile/README.md) on a phone. It remembers the selected tag across launches and reconnects after signal loss while the app is open. The browser app remains available for previews and the firmware workbench.
 
+The default firmware is a **timed servo demo**: it commands opening on startup, scans to lock for half a second, then scans the same pass to open for half a second. No position switches or setup hold are required. Position is assumed, and every restart clears the demo assignment.
+
 ## Try without hardware
 
 Install Node.js 22.16+ and run from the repository root:
@@ -42,4 +44,4 @@ npm test
 npm run build
 ```
 
-If the simulation reports stale firmware, [rebuild it](firmware/simulation/README.md#after-firmware-changes).
+If the simulation reports stale firmware, [rebuild it](firmware/simulation/README.md#rebuild-after-firmware-changes).

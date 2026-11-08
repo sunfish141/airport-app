@@ -18,10 +18,10 @@ Send raw ASCII without a terminator. Tokens are exactly 16 hexadecimal character
 
 | Bytes | Action |
 | --- | --- |
-| `L` + token (17 bytes) | Assign and close; requires open/unassigned and an active physical setup window |
+| `L` + token (17 bytes) | Assign and close; requires open/unassigned (older endpoint firmware also requires a physical setup window) |
 | `U` + token (17 bytes) | Release only if the stored token matches |
 | `C` (1 byte) | Close open/unassigned tag for storage |
-| `F` (1 byte) | Flash external LED for 2 seconds |
+| `F` (1 byte) | Legacy LED command; unused by the app (no LED fitted) |
 
 A 3-second physical button hold requests service opening. There is no BLE service-override command.
 
@@ -38,9 +38,11 @@ Exactly 12 bytes; multibyte integers are little-endian.
 | 4 | 2 | Setup milliseconds remaining, 0–10000 |
 | 6 | 4 | Event sequence, unsigned 32-bit with wraparound |
 | 10 | 1 | ASCII source: `L`, `U`, `C`, `F`, `S` (physical service), `-` (other) |
-| 11 | 1 | Reserved: `0` |
+| 11 | 1 | Mode: `0` endpoint feedback, `1` timed demo; reject other values |
 
 States: `0 OPEN_FREE`, `1 CLOSED_FREE`, `2 LOCKED_ASSIGNED`, `3 MOVING`, `4 FAULT`.
+
+The current firmware always reports timed demo. Contact inputs are diagnostic only; logical state can differ from contact flags, while assigned must still match the state. The app labels position unverified. `L` needs no setup window. Startup clears the demo assignment and commands opening; motion completes after 500 ms (450 ms pulse ramp plus 50 ms settling). Mode 0 remains supported for compatibility with older firmware and regression tests. Clients that only accept a zero byte at offset 11 must be updated before using timed firmware.
 
 Errors: `0 NONE`, `1 MALFORMED`, `2 UNKNOWN_COMMAND`, `3 BUSY`, `4 ASSIGNED`, `5 NOT_OPEN`, `6 SETUP_REQUIRED`, `7 UNASSIGNED`, `8 TOKEN_MISMATCH`, `9 TIMEOUT`, `10 SENSOR_CONFLICT`, `11 RECOVERY_REQUIRED`, `12 STORAGE`, `13 ACTUATOR`.
 

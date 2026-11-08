@@ -46,9 +46,13 @@ void scanner(void*) {
     else started = false;
     int16_t count = WIFI_SCAN_FAILED;
     while (started && live(request) && allowed.load() && uint32_t(millis() - lastScan) < 6000) {
-      count = WiFi.scanComplete();
-      if (count != WIFI_SCAN_RUNNING) break;
-      vTaskDelay(pdMS_TO_TICKS(20));
+      // Arduino 2.0.17's scanComplete() times out at dwell * 20 (2.4 s),
+      // prematurely failing scans extended by BLE/Wi-Fi coexistence. Wait for
+      // its real completion event; keep our own bounded, cancellable deadline.
+      if (WiFiGenericClass::waitStatusBits(WIFI_SCAN_DONE_BIT, 20) & WIFI_SCAN_DONE_BIT) {
+        count = WiFi.scanComplete();
+        break;
+      }
     }
     result.state = State::Failed;
     if (started && live(request) && allowed.load() && count >= 0) {
@@ -69,6 +73,9 @@ void scanner(void*) {
     esp_wifi_scan_stop();
     WiFi.mode(WIFI_OFF);
     WiFi.scanDelete();
+    // State/count only: never log SSIDs, AP addresses or the Google key.
+    Serial.printf("wifi state=%u count=%u elapsed_ms=%lu\n", unsigned(result.state), unsigned(result.count),
+                  static_cast<unsigned long>(millis() - lastScan));
     publish(request, result); // Disconnected/reused BLE sessions discard results.
   }
 }

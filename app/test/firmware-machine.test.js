@@ -6,6 +6,37 @@ import { encodeCommand, decodeStatus, DEMO_TOKENS } from '../src/protocol.js';
 
 const binary = await readFile(new URL('../public/firmware/controller.wasm', import.meta.url));
 const create = () => FirmwareMachine.create(binary);
+
+test('timed demo WASM uses the real servo ramp and completes without endpoint contacts or setup', async () => {
+  const machine = await FirmwareMachine.create(binary, { timedDemo: true });
+  machine.exports.sim_faults(0, 2, 0); // Neither endpoint is connected.
+  machine.advance(1100);
+  assert.equal(machine.snapshot().state, 'OPEN_FREE');
+  assert.equal(machine.snapshot().commandPulseUs, 500);
+  assert.equal(machine.snapshot().open, false);
+  assert.equal(decodeStatus(machine.packet).timedDemo, true);
+  machine.command(encodeCommand('L', DEMO_TOKENS[0])); machine.advance(2);
+  assert.equal(machine.snapshot().state, 'MOVING');
+  const pulse = machine.snapshot().pulseUs;
+  machine.advance(450);
+  assert.ok(machine.snapshot().pulseUs > pulse);
+  assert.equal(machine.snapshot().assigned, true);
+  machine.advance(600);
+  assert.equal(machine.snapshot().state, 'LOCKED_ASSIGNED');
+  assert.equal(machine.snapshot().closed, false);
+  assert.equal(machine.snapshot().commandPulseUs, 2500);
+  assert.equal(machine.snapshot().pwm, false);
+  machine.command(encodeCommand('U', DEMO_TOKENS[1])); machine.advance(2);
+  assert.equal(machine.snapshot().error, 'TOKEN_MISMATCH');
+  machine.command(encodeCommand('U', DEMO_TOKENS[0])); machine.advance(1100);
+  assert.equal(machine.snapshot().state, 'OPEN_FREE');
+  assert.equal(machine.snapshot().assigned, false);
+  assert.equal(machine.snapshot().commandPulseUs, 500);
+  machine.command(encodeCommand('L', DEMO_TOKENS[0])); machine.advance(1100);
+  machine.exports.sim_power(0); machine.exports.sim_power(1); machine.advance(1100);
+  assert.equal(machine.snapshot().state, 'OPEN_FREE');
+  assert.equal(machine.snapshot().assigned, false);
+});
 function setup(machine) { machine.exports.sim_hold(650); machine.advance(700); }
 function send(machine, opcode, token, time = 700) {
   assert.equal(machine.command(encodeCommand(opcode, token)), true);

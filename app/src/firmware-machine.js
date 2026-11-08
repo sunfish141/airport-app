@@ -2,15 +2,16 @@ import { STATES, ERRORS } from './protocol.js';
 
 // The decisions live in WebAssembly. This class only reads the C ABI and trace.
 export class FirmwareMachine {
-  static async create(bytes) {
+  static async create(bytes, { timedDemo = false } = {}) {
     const { instance } = await WebAssembly.instantiate(bytes, {});
-    return new FirmwareMachine(instance.exports);
+    return new FirmwareMachine(instance.exports, { timedDemo });
   }
-  constructor(exports) {
+  constructor(exports, { timedDemo = false } = {}) {
     this.exports = exports;
     exports._initialize();
     this.traceCursor = 0;
     this.reset();
+    if (timedDemo) { exports.sim_mode(1); this.advance(50); }
   }
   reset() { this.exports.sim_reset(); this.traceCursor = 0; this.advance(50); }
   advance(ms) { this.exports.sim_advance(Math.max(0, Math.min(60000, Math.floor(ms)))); }
@@ -40,9 +41,10 @@ export class FirmwareMachine {
     const value = (key) => this.exports.sim_value(key);
     return {
       engine: 'firmware', state: !value(17) ? 'POWER_OFF' : !value(16) ? 'BOOTING' : STATES[value(0)], error: ERRORS[value(1)],
+      timedDemo: Boolean(this.exports.sim_config(13)),
       assigned: Boolean(value(2)), rawOpen: Boolean(value(3)), rawClosed: Boolean(value(4)),
       open: Boolean(value(5)), closed: Boolean(value(6)), button: Boolean(value(7)), buttonDebounced: Boolean(value(8)),
-      pwm: Boolean(value(9)), pulseUs: value(10), pending: ['None', 'Open', 'Close'][value(11)],
+      pwm: Boolean(value(9)), pulseUs: value(10), commandPulseUs: value(30), pending: ['None', 'Open', 'Close'][value(11)],
       storedAssigned: value(12), storedPending: ['None', 'Open', 'Close'][value(13)] || 'Unknown',
       faultLatched: Boolean(value(14)), nvsState: ['Missing', 'Valid', 'Corrupt'][value(15)],
       ready: Boolean(value(16)), powered: Boolean(value(17)), led: Boolean(value(18)),
@@ -56,6 +58,7 @@ export class FirmwareMachine {
         openPulseUs: this.exports.sim_config(5), closedPulseUs: this.exports.sim_config(6),
         servoPin: this.exports.sim_config(7), openPin: this.exports.sim_config(8), closedPin: this.exports.sim_config(9),
         buttonPin: this.exports.sim_config(10), ledPin: this.exports.sim_config(11), servoHz: this.exports.sim_config(12),
+        timedDemo: Boolean(this.exports.sim_config(13)), demoMovementMs: this.exports.sim_config(14), demoSweepMs: this.exports.sim_config(15),
       },
     };
   }
@@ -77,6 +80,23 @@ export class FirmwareMachine {
 
 export function describeTrace(event, constants) {
   const direction = ['None', 'Open', 'Close'];
+  if (constants?.timedDemo) {
+    return [{
+      0: 'BOOT',
+      1: `NVS assigned=${event.a & 1} pending=${direction[event.b]} fault=${Number(Boolean(event.a & 2))}`,
+      2: 'NVS WRITE_FAILED',
+      3: `PWM start=${event.a}us target=${direction[event.b]}`,
+      4: 'PWM OFF',
+      5: `STATE ${STATES[event.a]} error=${ERRORS[event.b]}`,
+      6: `GPIO${constants.buttonPin} raw=${event.a & 4 ? 'LOW' : 'HIGH'}`,
+      7: `GPIO${constants.buttonPin} debounced=${event.a & 4 ? 'LOW' : 'HIGH'}`,
+      8: `BUTTON ${event.a ? 'DOWN' : 'UP'}`,
+      9: `POWER ${event.a ? 'ON' : 'OFF'}`,
+      10: `RX ${event.a ? String.fromCharCode(event.a) : 'EMPTY'} bytes=${event.b}`,
+      11: 'QUEUE OVERFLOW',
+      13: 'NVS CRC_CORRUPTED',
+    }[event.code] || `EVENT ${event.code}`, 'Simulator.cpp'];
+  }
   const flags = (n) => `open=${n & 1 ? 'LOW' : 'HIGH'}, closed=${n & 2 ? 'LOW' : 'HIGH'}, button=${n & 4 ? 'LOW' : 'HIGH'}`;
   return {
     0: ['Boot: PWM off; debounce inputs before NVS reconciliation', 'main.cpp → setup'],

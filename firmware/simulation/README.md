@@ -1,49 +1,35 @@
 # Firmware simulation
 
-Runs the same C++ controller as the physical tag, with simulated servo travel, contacts and storage. The diagram uses the ESP-WROOM-32 / SG90 / LM2596 configuration.
+Runs `Controller.cpp` and `ServoMotion.h` as WebAssembly. The open-case view shows the servo arm, connecting rod and sliding latch alongside the ESP32, LM2596 and D27 button. Motion follows the PWM command; linkage geometry is illustrative and position is unmeasured. Pin assignments are available below the view.
 
 ## Run
 
-Requires Node.js 22.16+. From the repository root:
+Requires Node.js 22.16+. From `app/`:
 
 ```sh
-cd app
 npm ci
 npm run simulate
 ```
 
-Open `/simulation.html` at the printed URL. The compiled firmware is included; no C++ compiler or physical hardware is needed to run it.
+Open `/simulation.html`. Click **Connect**, then scan pass A in the app preview to lock. Scan B to test rejection; scan A again to release. Moves complete after 500 ms. Boot clears assignment and commands opening.
 
-**Find tag → Estimate location** exercises the connected lookup flow with synthetic Wi-Fi readings and a labelled demo estimate. Radio scanning and location lookup run in JavaScript; they do not test the real `WifiScanner.cpp` adapter or an external provider. The actual C++ controller still handles actuation and recovery.
+- **Hold GPIO27:** manual button input. **Hold 3.2 s:** service opening.
+- **Reboot / Power off:** simulated power cycle. **Reset simulation:** clears saved state and injected faults.
+- **Radio inputs:** synthetic RSSI; location estimates also use synthetic data.
+- **Storage fault injection:** fail writes or corrupt the saved CRC.
+- **Event log / Build:** controller events, PWM settings and source hash.
+- **Pause / Step / Rate:** simulation time controls. App timeouts use wall time.
 
-1. Click **Connect** above the phone.
-2. In the phone, select **Scan to lock** and pass A.
-3. Click **Setup hold · 650 ms** when prompted; wait for **Bag locked**.
-4. Scan B to test rejection, then A to release.
-5. Use **Service hold · 3.2 s** for recovery or opening after storage closing.
+The browser saves simulated NVS. BLE, Wi-Fi, electrical behavior and mechanical loads are not emulated. Position is unverified, as on the current tag.
 
-## Controls
+## Rebuild after firmware changes
 
-- **Hardware assumptions & fault injection:** test a jam, switch faults, storage failure or corrupt saved state. Clear the injected fault before service opening.
-- **Bluetooth signal test:** open **Find tag** in the phone and change the synthetic RSSI slider. Disable readings to test stale-data handling. The radio is simulated in JavaScript; the C++ controller still handles locking and recovery.
-- **Cut main power / Reboot MCU:** retain saved assignment and bolt position. The phone reconnects automatically when the tag is ready again; interrupted movement still requires recovery.
-- **Reset saved simulation:** clears the saved demo and faults. Normal reloads retain browser-saved state.
-- **Firmware state / Event trace:** inspect position confirmation, stored ownership and command results.
-- **Speed / Pause / Step:** control simulated time. The phone’s 5-second timeout still uses real time, so reconnect after a long pause.
-
-The model assumes calibrated servo travel. It does not validate real wiring, Bluetooth reception, power/current or mechanical strength; PWM removal is not a guaranteed physical motor cutoff.
-
-## After firmware changes
-
-Install Zig 0.14.1 (the tested version) on `PATH`, then run from `app/`:
+Install Zig 0.14.1, then run from `app/`:
 
 ```sh
 npm run firmware:build
-npm run firmware:check
 npm test
 npm run build
 ```
 
-Alternatively set `WASM_CXX='/path/to/zig c++'` for the build command. A stale-build error means the controller/configuration changed: rebuild and reload the page. `npm run dev` does not compile C++.
-
-For a browser check, see the [app instructions](../../app/README.md#preview-and-checks) and run `npm run test:simulation`.
+Set `WASM_CXX='/path/to/zig c++'` if Zig is not on `PATH`. The app rejects stale builds. For the browser integration check, keep the dev server running and run `npm run test:simulation`; set `APP_URL` if needed.

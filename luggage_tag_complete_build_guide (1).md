@@ -14,36 +14,34 @@ Use the board’s GPIO labels, not physical header positions. These match [Board
 
 | Connection | Destination |
 | --- | --- |
-| Servo signal | GPIO25 |
+| Servo signal | GPIO14 (D14) |
 | Servo positive | Regulated 5 V servo supply |
 | Servo ground | Common GND with ESP32 and supply |
-| Open endpoint switch | GPIO32 to GND when fully open |
-| Closed endpoint switch | GPIO33 to GND when fully closed |
-| Setup/service button | GPIO27 to GND while pressed |
-| Optional LED | GPIO26 → 1 kΩ resistor → LED anode; cathode → GND |
+| GPIO32 / GPIO33 | Leave unconnected; not used for position confirmation |
+| Setup/service button | GPIO27 (D27) to GND while pressed |
 
 Inputs use internal pull-ups: closing a switch pulls its GPIO LOW. Never apply 5 V to a GPIO. On each four-leg tactile button, choose one leg from each internally connected pair; verify that continuity occurs only when pressed. [ESP32 pin reference](https://documentation.espressif.com/esp32-wroom-32_datasheet_en.html).
 
-## Bench test with the purchased buttons
+## Timed servo demo
 
-Without endpoint switches, use two spare tactile buttons on GPIO32 and GPIO33 to simulate them. These indicate positions manually; they do not prove that the servo moved.
+The firmware starts by commanding the open position for half a second, then shows **Scan to lock**. D32/D33 can be left unconnected.
 
-1. [Upload the firmware](firmware/README.md) and [install the mobile app](mobile/README.md).
-2. Hold only the open-position button while powering the tag. Keep it held until closing starts.
-3. Connect to `Carry-XXXXXX`, scan demo pass A, then hold the setup button for ½ second and release before 3 seconds.
-4. When closing starts, release the open button and press/hold the closed button before the movement timeout (initially 1 second). Wait for **Bag locked**.
-5. Scan pass B: it must be rejected. Scan A: when opening starts, release closed and press/hold open before the timeout. Wait for **Bag released**.
+1. Connect to `Carry-XXXXXX` and scan demo pass A. The servo sweeps toward closed for half a second, then the app shows **Bag locked**.
+2. Scan B to check rejection; the servo should stay still.
+3. Scan A again. The servo sweeps back for half a second, then the app shows **Bag released**.
 
-Do not assert both endpoints together. With neither endpoint connected at boot, the tag correctly enters recovery.
+No half-second setup hold is needed. Holding D27 for three seconds requests opening. Every restart clears the demo assignment and commands opening again. The app marks position as unverified: timing cannot detect a jam, disconnected servo or failed linkage.
+
+The standard positional SG90 moves between pulse targets; it does not spin continuously. The initial targets are 500/2500 µs, ramped over 450 ms plus 50 ms settling. Actual rotation depends on the servo; these pulse targets do not guarantee 180° or detect a mechanical stop. Calibrate these to the actual latch and keep its travel clear during startup. PWM is detached after movement; the latch must stay in place mechanically.
 
 ## Fit the mechanism
 
-Test the servo unloaded first, including its response to the ESP32’s 3.3 V signal. Fit a freely moving bolt through the cable eyelet; the base and guides must carry the cable load. Add endpoint contacts, travel stops and a manual way to release the linkage.
+Test the servo unloaded first, including its response to the ESP32’s 3.3 V signal. Fit a freely moving bolt through the cable eyelet; the base and guides must carry the cable load. Include travel stops and a manual way to release the linkage.
 
-Calibrate `OPEN_PULSE_US` and `CLOSED_PULSE_US` in [BoardConfig.h](firmware/include/BoardConfig.h). The initial 1400/1600 µs pulses are starting values, not calibrated positions. Adjust `MOVEMENT_TIMEOUT_MS` in [Config.h](firmware/include/Config.h) to measured travel. Rebuild and upload after changes.
+Calibrate `OPEN_PULSE_US` and `CLOSED_PULSE_US` in [BoardConfig.h](firmware/include/BoardConfig.h). The initial 500/2500 µs pulses are starting values, not calibrated positions. Adjust `DEMO_MOVEMENT_MS` and `DEMO_SETTLE_MS` in [Config.h](firmware/include/Config.h) if needed. Rebuild and upload after changes.
 
 ## Recovery and checks
 
-For a jam, switch off servo power before clearing it. Once clear and powered, hold the setup/service button for 3 seconds to request opening. This bypasses the pass check. The app confirms release only when the open contact is active; with bench buttons, supply that input yourself. Correct conflicting endpoint inputs first.
+For a jam, switch off servo power before clearing it. Once clear and powered, hold the setup/service button for 3 seconds to request opening. This bypasses the pass check. Opening is assumed after half a second.
 
-Before a demonstration, check repeated lock/release cycles, wrong-pass rejection, storage closing, service opening, and reconnecting after a reboot. Rebooting must not clear a locked assignment. Interrupted movement requires recovery. This is a functional prototype, not a tamper-resistant lock.
+Before a demonstration, check repeated lock/release cycles, wrong-pass rejection, storage closing, service opening, and reconnecting after a reboot. Rebooting deliberately clears the demo assignment and commands opening again. This is a functional prototype, not a tamper-resistant lock.

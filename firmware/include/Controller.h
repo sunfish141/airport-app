@@ -12,6 +12,7 @@ enum class Error : uint8_t {
 };
 enum class Pending : uint8_t { None, Open, Close };
 enum class LoadResult { Missing, Valid, Corrupt, Unavailable };
+enum class Mode { PositionFeedback, TimedDemo };
 struct Record {
   bool assigned = false;
   bool fault = false;
@@ -27,6 +28,7 @@ struct Status {
   uint16_t setupMs = 0;
   uint32_t sequence = 0;
   char command = '-';
+  bool timedDemo = false;
 };
 struct Hardware {
   virtual ~Hardware() = default;
@@ -54,7 +56,9 @@ class DebouncedInput {
 
 class Controller {
  public:
-  explicit Controller(Hardware& hardware) : hardware_(hardware) {}
+  explicit Controller(Hardware& hardware, Mode mode = Mode::PositionFeedback) : hardware_(hardware), mode_(mode) {
+    status_.timedDemo = mode == Mode::TimedDemo;
+  }
   void begin(Record record, LoadResult loaded, Sensors sensors, uint32_t now);
   void tick(Sensors sensors, bool button, uint32_t now);
   void command(const char* bytes, size_t length, uint32_t now);
@@ -63,6 +67,7 @@ class Controller {
   const Status& status() const { return status_; }
  private:
   Hardware& hardware_;
+  Mode mode_;
   Record record_;
   Status status_;
   bool setupActive_ = false, buttonDown_ = false, serviceFired_ = false;

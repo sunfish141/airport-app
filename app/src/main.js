@@ -119,9 +119,17 @@ reconnect = new TagReconnect(connection, {
 reconnect.setVisible(isVisible());
 
 function render() {
+  $('help-lock-copy').textContent = firmwareMode ? 'Scan a demo pass to command closing.' : latest && !latest.timedDemo ? 'Insert the cable and scan your demo pass. Hold the tag button for ½ second, then release.' : 'Insert the cable and scan your demo pass. Wait for the tag to finish closing.';
+  $('quick-setup').hidden = firmwareMode || Boolean(latest?.timedDemo);
+  $('help-find-copy').textContent = firmwareMode ? 'Open Find tag and follow the stronger signal. Radio readings are simulated.' : 'Open Find tag and walk slowly. Follow the stronger signal. Keep this page open and the tag connected.';
   const connected = connection.connected && Boolean(latest);
   if (intent.expired(performance.now())) { intent.clear(); notice('Scan timed out. Scan your pass again.', true); }
   const state = connected ? latest.state : null;
+  if (!simulation || latest?.timedDemo) {
+    $('demo-label').hidden = !latest?.timedDemo;
+    $('demo-label').textContent = 'Timed demo';
+    document.querySelector('footer').textContent = latest?.timedDemo ? 'Timed demo · Position unverified' : 'Demo passes only';
+  }
   const waiting = connected && intent.pending;
   const moving = state === 'MOVING';
   const retrying = !connected && reconnect?.searching;
@@ -133,7 +141,7 @@ function render() {
   else if (connecting) { title = 'Connecting…'; detail = 'Choose your tag in the Bluetooth list.'; }
   else if (!connected && reconnect?.remembered) { title = 'Reconnect your tag'; detail = `Keep ${reconnect.name} powered on and nearby.`; }
   else if (waiting) { title = 'Press the tag button'; detail = 'Hold for ½ second, then release. Your pass is scanned.'; icon = 'button'; }
-  else if (state === 'OPEN_FREE') { title = released ? 'Bag released' : 'Lock your bag'; detail = released ? 'You can remove the cable.' : 'Insert the cable, then scan your pass.'; icon = released ? 'released' : 'bag'; }
+  else if (state === 'OPEN_FREE') { title = released ? 'Bag released' : 'Lock your bag'; detail = firmwareMode ? released ? 'Servo opening completed.' : 'Scan a pass to command closing.' : released ? 'You can remove the cable.' : 'Insert the cable, then scan your pass.'; icon = released ? 'released' : 'bag'; }
   else if (state === 'LOCKED_ASSIGNED') { title = 'Bag locked'; detail = 'Scan the same pass to release.'; icon = 'locked'; }
   else if (state === 'CLOSED_FREE') { title = 'Tag stored'; detail = 'Hold the tag button for 3 seconds to open.'; icon = 'button'; }
   else if (moving) { title = (operation || latest.command) === 'L' ? 'Locking…' : (operation || latest.command) === 'C' ? 'Closing…' : 'Releasing…'; detail = 'Wait for the tag to finish.'; icon = 'moving'; }
@@ -159,10 +167,8 @@ function render() {
   $('disconnect').hidden = !connected;
   $('storage').hidden = state !== 'OPEN_FREE';
   $('storage').disabled = !(canAct && state === 'OPEN_FREE');
-  $('flash').disabled = !canAct;
   $('find').hidden = !connected;
   $('find').disabled = $('find-in-options').disabled = !canAct || connecting;
-  $('finder-flash').disabled = !canAct;
   $('manual-lock').hidden = state !== 'OPEN_FREE';
   $('manual-unlock').hidden = state !== 'LOCKED_ASSIGNED';
   const remaining = Math.max(0, setupDeadline - performance.now());
@@ -180,7 +186,7 @@ function renderFinder() {
   let reading = '';
   if (!connection.connected) { label = reconnect?.searching ? 'Reconnecting…' : 'Connection lost'; trend = reconnect?.searching ? `Looking for ${reconnect.name}. Move closer and keep the tag powered on.` : 'Reconnect to search again. The tag may be off or out of range.'; }
   else if (!isVisible()) { label = 'Search paused'; trend = 'Return to the app to continue.'; }
-  else if (signalSupport === false) { label = 'Update tag firmware'; trend = 'This tag does not provide signal readings. You can still flash its light.'; }
+  else if (signalSupport === false) { label = 'Update tag firmware'; trend = 'This tag does not provide signal readings. Update its firmware to use Bluetooth search.'; }
   else if (sample.state === 'stale') { label = 'Signal unavailable'; trend = 'No fresh reading. Move closer or reconnect.'; }
   else if (sample.state === 'live') { label = sample.label; trend = sample.trend; bars = sample.bars; reading = `${sample.rssi} dBm · smoothed`; }
   else if (signalError && sample.state === 'waiting') { label = 'Waiting for signal'; trend = 'No valid reading yet. Move closer or reconnect.'; }
@@ -193,7 +199,6 @@ function renderFinder() {
   $('signal-bars').setAttribute('aria-label', `${label}${bars ? `, ${bars} of 4 bars` : ''}`);
   $('finder-reconnect').hidden = connection.connected || reconnect?.searching;
   $('finder-stop').hidden = connection.connected || !reconnect?.searching;
-  $('finder-flash').hidden = !connection.connected;
   const result = tagLocation?.result;
   $('location-update').disabled = !connection.connected || !isVisible() || Boolean(tagLocation?.busy) || Boolean(connection.wifiScan) || busy || Boolean(intent.pending) || latest?.state === 'MOVING' || latest?.setupMs > 0;
   $('location-update').textContent = tagLocation?.busy ? 'Updating location…' : result ? 'Update location' : 'Estimate location';
@@ -233,7 +238,6 @@ function startSignalSearch() {
 }
 function openFinder() {
   $('tag-options').close();
-  $('finder-message').textContent = '';
   $('finder').showModal();
   startSignalSearch();
 }
@@ -245,6 +249,7 @@ function consumeIntent() {
 }
 function queueLock(token) {
   if (!connection.connected || latest?.state !== 'OPEN_FREE' || busy) { notice('Tag state changed. Reconnect or try again.', true); return; }
+  if (latest.timedDemo) { void run('L', token); return; }
   intent.queue(token, performance.now());
   notice();
   consumeIntent();
@@ -258,7 +263,6 @@ async function run(opcode, token) {
   render();
   try {
     await connection.send(opcode, token);
-    if (opcode === 'F') notice('Tag is flashing.');
   } catch (error) {
     if (latest?.state !== 'FAULT') notice(friendlyError(error), true);
   } finally { $('token').value = ''; busy = false; operation = null; render(); }
@@ -349,12 +353,10 @@ $('forget-tag').addEventListener('click', () => { $('tag-options').close(); reco
 $('lock').addEventListener('click', () => scan('L'));
 $('unlock').addEventListener('click', () => scan('U'));
 $('storage').addEventListener('click', () => { $('tag-options').close(); void run('C'); });
-$('flash').addEventListener('click', () => { $('tag-options').close(); void run('F'); });
 $('find').addEventListener('click', openFinder);
 $('find-in-options').addEventListener('click', openFinder);
 $('finder').addEventListener('close', () => { stopSignalSearch(); tagLocation.clear(); });
 $('location-update').addEventListener('click', () => void tagLocation.refresh());
-$('finder-flash').addEventListener('click', async () => { await run('F'); $('finder-message').textContent = $('notice').textContent; });
 $('finder-reconnect').addEventListener('click', () => { $('finder').close(); $('connect').click(); });
 $('finder-stop').addEventListener('click', () => reconnect.stop());
 $('cancel-lock').addEventListener('click', () => { intent.clear(); notice(); render(); });
@@ -385,6 +387,11 @@ window.addEventListener('pagehide', () => { intent.clear(); stopSignalSearch(); 
 setInterval(render, 200);
 
 if (simulation) {
+  if (firmwareMode) {
+    $('help-release-copy').textContent = 'Scan the same pass to command opening.';
+    $('help-service-copy').textContent = 'Hold GPIO27 for 3 seconds to request opening.';
+    document.querySelector('#help-dialog .support-note').hidden = true;
+  }
   document.body.dataset.demo = firmwareMode ? 'firmware' : 'demo';
   document.querySelector('.brand').href = firmwareMode ? './?demo=firmware' : './?demo=1';
   $('demo-label').hidden = false;

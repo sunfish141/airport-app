@@ -55,7 +55,7 @@
     </dialog>
     <dialog id="tag-options" aria-labelledby="options-title">
       <div class="dialog-heading"><h2 id="options-title">Tag options</h2><form method="dialog"><button class="text-button">Done</button></form></div>
-      <div class="option-list"><button id="find-in-options" disabled>Find tag <span>Follow the signal</span></button><button id="flash" disabled>Flash light</button><button id="storage" disabled>Close for storage</button><button id="disconnect" hidden>Disconnect</button><button id="forget-tag" hidden>Forget saved tag</button></div>
+      <div class="option-list"><button id="find-in-options" disabled>Find tag <span>Follow the signal</span></button><button id="storage" disabled>Close for storage</button><button id="disconnect" hidden>Disconnect</button><button id="forget-tag" hidden>Forget saved tag</button></div>
       <details id="manual-entry"><summary>Enter a demo token</summary><form id="manual-form"><label for="token">16-character token</label><input id="token" name="token" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="16" placeholder="A1B2C3D4E5F60718" pattern="[a-fA-F0-9]{16}" required/><div class="manual-actions"><button id="manual-lock" class="primary" type="submit" name="action" value="L" disabled>Lock</button><button id="manual-unlock" class="primary" type="submit" name="action" value="U" disabled>Release</button></div></form></details>
       <div id="demo-tools" class="demo-tools" hidden><h3>Simulated tag</h3><button id="quick-setup">Press for setup</button><button id="quick-service">Hold to open · 3 seconds</button></div>
       <a class="support-link" href="./demo-passes.html" target="_blank" rel="noopener">View demo passes ↗</a>
@@ -73,17 +73,15 @@
         <p id="location-message" hidden><span id="location-status" role="status"></span><span id="location-age" aria-hidden="true"></span></p>
         <a id="location-map" class="support-link" target="_blank" rel="noopener" hidden>Open estimated area in Maps ↗</a>
       </section>
-      <button id="finder-flash" class="primary">Flash light</button>
       <button id="finder-reconnect" class="primary" hidden>Reconnect</button>
       <button id="finder-stop" class="text-button find-button" hidden>Stop reconnecting</button>
-      <p id="finder-message" class="scan-message" role="status"></p>
     </dialog>
     <dialog id="help-dialog" aria-labelledby="help-title">
       <div class="dialog-heading"><h2 id="help-title">Using your tag</h2><form method="dialog"><button class="text-button">Done</button></form></div>
-      <section class="help-section"><h3>Lock</h3><p>Insert the cable and scan your demo pass. Hold the tag button for ½ second, then release.</p></section>
-      <section class="help-section"><h3>Release</h3><p>Scan the same pass. Remove the cable once the tag is open.</p></section>
-      <section class="help-section"><h3>Find</h3><p>Open Find tag and walk slowly. Follow the stronger signal, then flash the light to confirm. Keep this page open and the tag connected.</p></section>
-      <section class="help-section"><h3>Stored or stuck?</h3><p>Clear the bolt, then hold the tag button for 3 seconds. If the motor keeps pushing, switch the tag off before clearing it.</p></section>
+      <section class="help-section"><h3>Lock</h3><p id="help-lock-copy">Insert the cable and scan your demo pass. Wait for the tag to finish closing.</p></section>
+      <section class="help-section"><h3>Release</h3><p id="help-release-copy">Scan the same pass. Remove the cable once the tag is open.</p></section>
+      <section class="help-section"><h3>Find</h3><p id="help-find-copy">Open Find tag and walk slowly. Follow the stronger signal. Keep this page open and the tag connected.</p></section>
+      <section class="help-section"><h3>Stored or stuck?</h3><p id="help-service-copy">Clear the bolt, then hold the tag button for 3 seconds. If the motor keeps pushing, switch the tag off before clearing it.</p></section>
       <p class="support-note">Real tag: Android Chrome over HTTPS.<br/>This prototype accepts demo QR passes only.</p>
     </dialog>
     <script type="module" src="/src/main.js"></script>

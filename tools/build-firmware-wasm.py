@@ -11,7 +11,7 @@ import subprocess
 root = Path(__file__).resolve().parents[1]
 sources = ["firmware/src/Controller.cpp", "firmware/include/Controller.h",
            "firmware/include/Config.h", "firmware/simulation/Simulator.cpp",
-           "tools/build-firmware-wasm.py", "firmware/include/BoardConfig.h"]
+           "tools/build-firmware-wasm.py", "firmware/include/BoardConfig.h", "firmware/include/ServoMotion.h"]
 compiler = shlex.split(os.environ.get("WASM_CXX", "zig c++"))
 if not shutil.which(compiler[0]):
     raise SystemExit("Install Zig 0.14.1+ and put zig on PATH, or set WASM_CXX='/path/to/zig c++'. See firmware/simulation/README.md.")
@@ -20,7 +20,7 @@ destination.mkdir(parents=True, exist_ok=True)
 exports = ["sim_reset", "sim_advance", "sim_button", "sim_hold", "sim_power", "sim_faults",
            "sim_travel", "sim_cable", "sim_corrupt", "sim_record_ptr", "sim_restore",
            "sim_command_ptr", "sim_command", "sim_status_ptr", "sim_position",
-           "sim_trace_count", "sim_trace_ptr", "sim_trace_status_ptr", "sim_value", "sim_config", "sim_manual_position"]
+           "sim_trace_count", "sim_trace_ptr", "sim_trace_status_ptr", "sim_value", "sim_config", "sim_manual_position", "sim_mode"]
 output = destination / "controller.wasm"
 subprocess.run(compiler + [
     "-target", "wasm32-wasi", "-mexec-model=reactor", "-std=c++11", "-O2",

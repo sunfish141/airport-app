@@ -145,9 +145,7 @@ try {
   await state('Bag locked');
   await manual('A1B2C3D4E5F60718', 'U');
   await page.locator('#notice').getByText(/Wrong pass/).waitFor();
-  await options();
-  await page.locator('#flash').click();
-  await page.locator('#notice').getByText('Tag is flashing.', { exact: true }).waitFor();
+  assert.equal(await page.locator('#flash, #finder-flash').count(), 0);
   await page.locator('#find').click();
   const signalLabel = (text) => page.locator('#signal-label').getByText(text, { exact: true }).waitFor();
   await signalLabel('Strong signal');
@@ -171,8 +169,6 @@ try {
   await page.evaluate(() => { delete document.hidden; document.dispatchEvent(new Event('visibilitychange')); });
   await signalLabel('Checking signal…');
   await signalLabel('Strong signal');
-  await page.locator('#finder-flash').click();
-  await page.locator('#finder-message').getByText('Tag is flashing.', { exact: true }).waitFor();
   await page.evaluate(() => { window.tagTest.signalAvailable = false; });
   await signalLabel('Signal unavailable');
   assert.equal(await page.locator('#signal-bars').getAttribute('data-bars'), '0');
@@ -191,8 +187,6 @@ try {
   await state('Bag locked');
   await page.locator('#find').click();
   await signalLabel('Update tag firmware');
-  await page.locator('#finder-flash').click();
-  await page.locator('#finder-message').getByText('Tag is flashing.', { exact: true }).waitFor();
   await page.locator('#finder').getByRole('button', { name: 'Done', exact: true }).click();
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.screenshot({ path: join(artifacts, 'desktop.png'), fullPage: true });

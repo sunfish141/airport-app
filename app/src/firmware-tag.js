@@ -3,7 +3,7 @@ import { FirmwareMachine } from './firmware-machine.js';
 import { SimulatedSignal } from './simulated-signal.js';
 import { SimulatedWifi } from './simulated-wifi.js';
 
-const STORAGE_KEY = 'carry.firmware-workbench.v1';
+const STORAGE_KEY = 'carry.firmware-workbench.timed.v1';
 
 // GATT-shaped transport only. All state decisions are made by Controller.cpp.
 export class FirmwareTag {
@@ -68,7 +68,7 @@ export class FirmwareTag {
     this.manifest = await manifestResponse.json();
     const response = await fetch(new URL(`controller.wasm?v=${this.manifest.wasmHash}`, base));
     if (!response.ok) throw new Error('Compiled firmware unavailable. Run npm run firmware:build.');
-    this.machine = await FirmwareMachine.create(await response.arrayBuffer());
+    this.machine = await FirmwareMachine.create(await response.arrayBuffer(), { timedDemo: true });
     try {
       const saved = localStorage.getItem(STORAGE_KEY);
       if (saved) this.machine.restore(JSON.parse(saved));

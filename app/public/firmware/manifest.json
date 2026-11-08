@@ -6,10 +6,11 @@
     "firmware/include/Config.h",
     "firmware/simulation/Simulator.cpp",
     "tools/build-firmware-wasm.py",
-    "firmware/include/BoardConfig.h"
+    "firmware/include/BoardConfig.h",
+    "firmware/include/ServoMotion.h"
   ],
-  "sourceHash": "4bfb69e8f3e0a32b13d8a34d734018cd6eea49ca65904eac679e41681b25b882",
-  "wasmHash": "a09c36777c97c1a3c7d6be4b8d152ba47119f8c264919f2d8118d0481cfeb304",
+  "sourceHash": "904c362e525e7ce394a08228a9c9595d3c1dc7273064ba28f5d8559410d6fbe8",
+  "wasmHash": "5349599d6b7063c4e84caa1fc73c1f181d5c8e34b9b01b7770d85ed61f1b3a4a",
   "compiler": "Zig 0.14.1 C++",
   "target": "wasm32-wasi",
   "controllerSource": "Controller.cpp.txt"

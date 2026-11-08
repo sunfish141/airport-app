@@ -76,6 +76,14 @@ void Controller::begin(Record record, LoadResult loaded, Sensors sensors, uint32
   record_ = record;
   status_.sensors = sensors;
   hardware_.stop();
+  if (mode_ == Mode::TimedDemo) {
+    // Explicit bench-demo behavior: every boot clears its demo assignment and
+    // commands opening. Physical position remains unverified. Real-tag NVS is
+    // kept in a separate namespace by the board adapter.
+    record_ = Record{};
+    move(Pending::Open, '-', now);
+    return;
+  }
   if (loaded == LoadResult::Corrupt || loaded == LoadResult::Unavailable) {
     // Unknown persisted ownership must never become an unassigned tag at boot.
     record_.assigned = true;
@@ -123,6 +131,7 @@ void Controller::finish(uint32_t now) {
 void Controller::service(uint32_t now) {
   hardware_.stop();
   setupActive_ = false;
+  if (mode_ == Mode::TimedDemo) return move(Pending::Open, 'S', now);
   if (status_.sensors.open && status_.sensors.closed) return fault(Error::SensorConflict, 'S', now);
   // Even an already-open recovery saves a pending intent before clearing ownership.
   if (status_.sensors.open) {
@@ -135,7 +144,9 @@ void Controller::service(uint32_t now) {
 
 void Controller::tick(Sensors sensors, bool button, uint32_t now) {
   status_.sensors = sensors;
-  if (sensors.open && sensors.closed) {
+  if (mode_ == Mode::TimedDemo) {
+    if (status_.state == State::Moving && uint32_t(now - moveStarted_) >= config::DEMO_MOVEMENT_MS) finish(now);
+  } else if (sensors.open && sensors.closed) {
     if (status_.state != State::Fault) fault(Error::SensorConflict, movementCommand_, now);
   } else if (status_.state == State::Moving) {
     if (uint32_t(now - moveStarted_) >= config::MOVEMENT_TIMEOUT_MS) fault(Error::Timeout, movementCommand_, now);
@@ -153,7 +164,7 @@ void Controller::tick(Sensors sensors, bool button, uint32_t now) {
   if (!button && buttonDown_) {
     const uint32_t held = now - buttonStarted_;
     buttonDown_ = false;
-    if (!serviceFired_ && held >= config::SETUP_HOLD_MS && status_.state == State::OpenFree && !record_.assigned) {
+    if (mode_ != Mode::TimedDemo && !serviceFired_ && held >= config::SETUP_HOLD_MS && status_.state == State::OpenFree && !record_.assigned) {
       setupActive_ = true;
       setupStarted_ = now;
       lastSetupSecond_ = 10;
@@ -185,7 +196,7 @@ void Controller::command(const char* bytes, size_t length, uint32_t now) {
   if (opcode == 'L') {
     if (record_.assigned) return emit(Error::Assigned, opcode, now);
     if (status_.state != State::OpenFree) return emit(Error::NotOpen, opcode, now);
-    if (!setupRemaining(now)) return emit(Error::SetupRequired, opcode, now);
+    if (mode_ != Mode::TimedDemo && !setupRemaining(now)) return emit(Error::SetupRequired, opcode, now);
     record_.assigned = true;
     record_.token = token;
     move(Pending::Close, opcode, now);
@@ -232,6 +243,7 @@ std::array<uint8_t, 12> encodeStatus(const Status& status) {
   bytes[4] = uint8_t(status.setupMs); bytes[5] = uint8_t(status.setupMs >> 8);
   write32(bytes.data() + 6, status.sequence);
   bytes[10] = uint8_t(status.command);
+  bytes[11] = uint8_t(status.timedDemo);
   return bytes;
 }
 }

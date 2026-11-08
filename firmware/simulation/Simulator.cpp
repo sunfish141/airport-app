@@ -2,6 +2,7 @@
 // unchanged alongside this file. No Arduino/NimBLE/ESP32 CPU is emulated here.
 #include "Controller.h"
 #include "BoardConfig.h"
+#include "ServoMotion.h"
 #include <new>
 #include <cstring>
 
@@ -33,6 +34,9 @@ struct Message { uint8_t length; char bytes[17]; };
 Message queue[8]{};
 uint8_t queueHead = 0, queueLength = 0;
 bool overflow = false;
+bool timedDemo = false;
+ServoMotion servoMotion;
+uint32_t uptime();
 
 class SimHardware : public tag::Hardware {
  public:
@@ -47,11 +51,14 @@ class SimHardware : public tag::Hardware {
   bool drive(tag::Pending direction) override {
     pwm = true;
     target = direction == tag::Pending::Open ? 0.0f : 1.0f;
-    pulseUs = direction == tag::Pending::Open ? boardconfig::OPEN_PULSE_US : boardconfig::CLOSED_PULSE_US;
+    const uint16_t targetPulse = direction == tag::Pending::Open ? boardconfig::OPEN_PULSE_US : boardconfig::CLOSED_PULSE_US;
+    servoMotion.start(targetPulse, uptime(), timedDemo ? config::DEMO_SWEEP_MS : 0);
+    pulseUs = servoMotion.value(uptime());
     trace(3, pulseUs, uint32_t(direction));
     return true;
   }
   void stop() override {
+    servoMotion.stop(uptime());
     if (pwm) trace(4);
     pwm = false;
     pulseUs = 0;
@@ -69,7 +76,8 @@ uint32_t uptime() { return worldMs - bootAt; }
 void restart() {
   hardware.stop();
   controller.~Controller();
-  new (&controller) tag::Controller(hardware);
+  new (&controller) tag::Controller(hardware, timedDemo ? tag::Mode::TimedDemo : tag::Mode::PositionFeedback);
+  servoMotion = ServoMotion();
   openInput = tag::DebouncedInput();
   closedInput = tag::DebouncedInput();
   buttonInput = tag::DebouncedInput();
@@ -88,6 +96,13 @@ bool bounce(bool ideal, uint32_t changed) {
 }
 void plant() {
   if (pwm) {
+    pulseUs = servoMotion.value(uptime());
+    if (timedDemo) {
+      target = float(int(pulseUs) - int(boardconfig::OPEN_PULSE_US)) /
+               float(int(boardconfig::CLOSED_PULSE_US) - int(boardconfig::OPEN_PULSE_US));
+      if (target < 0) target = 0;
+      if (target > 1) target = 1;
+    }
     const float delta = 2.0f / float(travelMs);
     if (target > position) {
       const float limit = jam ? 0.48f : target;
@@ -105,6 +120,8 @@ void sample() {
   if (sensorMode == 2) open = closed = false;
   if (sensorMode == 3) open = false;
   if (sensorMode == 4) closed = false;
+  // D32/D33 are unconnected on the timed-demo board (pull-ups read HIGH).
+  if (timedDemo) open = closed = false;
   if (open != idealOpen) { idealOpen = open; openChanged = worldMs; }
   if (closed != idealClosed) { idealClosed = closed; closedChanged = worldMs; }
   rawOpen = bounce(idealOpen, openChanged);
@@ -153,6 +170,7 @@ void tick() {
 }
 
 extern "C" {
+void sim_mode(int timed) { timedDemo = bool(timed); restart(); }
 void sim_reset() {
   hardware.stop();
   worldMs = bootAt = traceId = tickRemainder = saves = 0;
@@ -238,6 +256,9 @@ int sim_config(int key) {
     case 10: return boardconfig::BUTTON_PIN;
     case 11: return boardconfig::LED_PIN;
     case 12: return boardconfig::SERVO_HZ;
+    case 13: return timedDemo;
+    case 14: return config::DEMO_MOVEMENT_MS;
+    case 15: return config::DEMO_SWEEP_MS;
     default: return 0;
   }
 }
@@ -278,6 +299,7 @@ int sim_value(int key) {
     case 27: return flashing;
     case 28: return int(travelMs);
     case 29: return valid ? stored.fault : -1;
+    case 30: return servoMotion.value(uptime());
     default: return -1;
   }
 }

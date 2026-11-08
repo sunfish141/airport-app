@@ -49,8 +49,14 @@ export function locationHandler({ apiKey, fetchImpl = fetch, now = Date.now } = 
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   if (!process.env.GOOGLE_GEOLOCATION_API_KEY) {
-    console.error('Set GOOGLE_GEOLOCATION_API_KEY before starting the location relay.');
+    console.error('Set GOOGLE_GEOLOCATION_API_KEY in server/.env.local or your shell before starting the location relay.');
     process.exitCode = 1;
-  } else createServer(locationHandler({ apiKey: process.env.GOOGLE_GEOLOCATION_API_KEY }))
-    .listen(8787, '127.0.0.1', () => console.log('Location relay: http://127.0.0.1:8787/geolocate (loopback only)'));
+  } else {
+    const handler = locationHandler({ apiKey: process.env.GOOGLE_GEOLOCATION_API_KEY });
+    createServer((request, response) => {
+      // Log the outcome only, never credentials, AP addresses or coordinates.
+      response.once('finish', () => console.log(`Location relay: HTTP ${response.statusCode}`));
+      void handler(request, response);
+    }).listen(8787, '127.0.0.1', () => console.log('Location relay: http://127.0.0.1:8787/geolocate (loopback only)'));
+  }
 }

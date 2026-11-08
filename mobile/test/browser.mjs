@@ -7,6 +7,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 const url = process.env.MOBILE_URL || 'http://127.0.0.1:5179';
+const timedDemo = process.env.CARRY_TEST_TIMED_DEMO === '1';
 const artifacts = await mkdtemp(join(tmpdir(), 'carry-native-'));
 const browser = await chromium.launch({ headless: true, args: ['--no-sandbox', '--disable-dev-shm-usage'] });
 try {
@@ -19,7 +20,7 @@ try {
     assert.equal(payload.wifiAccessPoints[0].signalStrength, -55);
     await route.fulfill({ json: { location: { lat: 43.6777, lng: -79.6248 }, accuracy: 80 } });
   });
-  await page.addInitScript(() => {
+  await page.addInitScript((timedDemo) => {
     const service = '7db10001-3a7e-4f5c-9b21-51c61a7e0001';
     const command = service.replace('0001-', '0002-');
     const status = service.replace('0001-', '0003-');
@@ -28,7 +29,7 @@ try {
     let wifiRequest = 0;
     const listeners = new Map();
     const events = [];
-    const values = JSON.parse(localStorage.getItem('mock.tag') || 'null') || { state: 0, flags: 2, sequence: 1, command: '-', token: null, setupMs: 0, error: 0 };
+    const values = JSON.parse(localStorage.getItem('mock.tag') || 'null') || { state: 0, flags: timedDemo ? 0 : 2, sequence: 1, command: '-', token: null, setupMs: 0, error: 0, timedDemo };
     function hex(bytes) { return [...bytes].map((value) => value.toString(16).padStart(2, '0')).join(''); }
     function packet() {
       const bytes = new Uint8Array(12);
@@ -36,6 +37,7 @@ try {
       bytes.set([1, values.state, values.error, values.flags]);
       view.setUint16(4, values.setupMs, true); view.setUint32(6, values.sequence, true);
       bytes[10] = values.command.charCodeAt(0);
+      bytes[11] = Number(values.timedDemo);
       return hex(bytes);
     }
     function emit(patch) {
@@ -44,7 +46,7 @@ try {
       listeners.get(`BluetoothLe:notification|tag-A|${service}|${status}`)?.({ value: packet() });
     }
     const mock = window.nativeTest = {
-      events, pass: 'A1B2C3D4E5F60718', reads: 0, scans: 0, wifiScans: 0, active: true, rssi: -55,
+      events, pass: 'A1B2C3D4E5F60718', reads: 0, scans: 0, wifiScans: 0, httpCalls: [], active: true, rssi: -55,
       setup: () => emit({ setupMs: 10000, command: '-' }),
       drop: () => listeners.get('BluetoothLe:disconnected|tag-A')?.({ deviceId: 'tag-A' }),
       activeState: (active) => { mock.active = active; listeners.get('App:appStateChange')?.({ isActive: active }); },
@@ -54,6 +56,8 @@ try {
       App: ['getState', 'minimizeApp'], Preferences: ['get', 'set', 'remove'],
       BluetoothLe: ['initialize', 'isEnabled', 'requestDevice', 'getDevices', 'connect', 'disconnect', 'getServices', 'read', 'write', 'startNotifications'],
       CapacitorBarcodeScanner: ['scanBarcode'],
+      CapacitorHttp: ['post'],
+      CarryLocation: ['locate', 'cancel'],
     };
     window.androidBridge = {};
     window.Capacitor = {
@@ -75,6 +79,16 @@ try {
           return {};
         }
         if (plugin === 'App') return method === 'getState' ? { isActive: mock.active } : {};
+        if (plugin === 'CarryLocation') {
+          if (method === 'cancel') return {};
+          mock.locationCalls ??= [];
+          mock.locationCalls.push(options);
+          return { location: { lat: 43.6777, lng: -79.6248 }, accuracy: 80 };
+        }
+        if (plugin === 'CapacitorHttp' && method === 'post') {
+          mock.httpCalls.push(options);
+          return { status: 200, data: { location: { lat: 43.6777, lng: -79.6248 }, accuracy: 80 } };
+        }
         if (plugin === 'CapacitorBarcodeScanner') {
           ++mock.scans;
           assertQr(options.hint === 0);
@@ -120,10 +134,10 @@ try {
           if (opcode === 'F') { emit({ command: opcode, error: 0 }); return {}; }
           if (opcode === 'U' && text.slice(1) !== values.token) { emit({ command: opcode, error: 8 }); return {}; }
           if (opcode === 'L') values.token = text.slice(1);
-          emit({ state: 3, flags: opcode === 'L' ? 3 : 5, command: opcode, setupMs: 0, error: 0 });
+          emit({ state: 3, flags: timedDemo ? 1 : opcode === 'L' ? 3 : 5, command: opcode, setupMs: 0, error: 0 });
           setTimeout(() => {
             if (opcode === 'U') values.token = null;
-            emit({ state: opcode === 'L' ? 2 : 0, flags: opcode === 'L' ? 5 : 2 });
+            emit({ state: opcode === 'L' ? 2 : 0, flags: timedDemo ? opcode === 'L' ? 1 : 0 : opcode === 'L' ? 5 : 2 });
           }, 80);
           return {};
         }
@@ -132,15 +146,24 @@ try {
     };
     function assertQr(value) { if (!value) throw new Error('Scanner must request a QR pass'); }
     Object.defineProperty(navigator, 'bluetooth', { value: undefined });
-  });
+  }, timedDemo);
   const state = (text) => page.getByRole('heading', { name: text, exact: true }).waitFor();
   await page.goto(url);
   await state('Connect your tag');
+  assert.equal(await page.locator('#flash, #finder-flash').count(), 0);
+  await page.locator('#help').click();
+  assert.doesNotMatch(await page.locator('#help-dialog').innerText(), /flash|light|LED/);
+  await page.locator('#help-dialog').getByRole('button', {name: 'Done', exact: true}).click();
   await page.locator('#connect').click();
   await state('Lock your bag');
   await page.locator('#lock').click();
-  await state('Press the tag button');
-  await page.evaluate(() => nativeTest.setup());
+  if (!timedDemo) {
+    await state('Press the tag button');
+    await page.evaluate(() => nativeTest.setup());
+  } else {
+    assert.equal(await page.locator('#demo-label').textContent(), 'Timed demo');
+    assert.match(await page.locator('footer').textContent(), /Position unverified/);
+  }
   await state('Bag locked');
   assert.equal(await page.evaluate(() => nativeTest.scans), 1);
   const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('mock.preferences.carry.remembered-tag.v1')));
@@ -152,12 +175,27 @@ try {
   await state('Reconnecting to your tag');
   await state('Bag locked');
   await page.locator('#find').click();
+  assert.doesNotMatch(await page.locator('#finder').innerText(), /flash|light|LED/);
   await page.locator('#signal-label').getByText('Strong signal', { exact: true }).waitFor();
   assert.equal(await page.evaluate(() => nativeTest.wifiScans), 0);
   await page.locator('#location-update').click();
   const configured = await page.evaluate(() => Boolean(carryPlatform.locate));
   await page.locator('#location-status').getByText(configured ? /Accuracy radius: 80 m/ : /Location lookup is unavailable/).waitFor();
   assert.equal(await page.evaluate(() => nativeTest.wifiScans), configured ? 1 : 0);
+  const nativeCalls = await page.evaluate(() => nativeTest.locationCalls || []);
+  assert.equal(nativeCalls.length, 1);
+  assert.deepEqual(Object.keys(nativeCalls[0]).sort(), ['id', 'wifiAccessPoints']);
+  assert.equal(nativeCalls[0].wifiAccessPoints.length, 2);
+  const httpCalls = await page.evaluate(() => nativeTest.httpCalls);
+  if (httpCalls.length) {
+    assert.equal(httpCalls.length, 1);
+    assert.match(httpCalls[0].url, /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?\/geolocate$/);
+    assert.deepEqual(Object.keys(httpCalls[0].data), ['wifiAccessPoints']);
+    assert.equal(httpCalls[0].data.wifiAccessPoints.length, 2);
+    assert.equal(httpCalls[0].data.wifiAccessPoints[0].signalStrength, -55);
+    assert.equal(httpCalls[0].connectTimeout, 8000);
+    assert.equal(httpCalls[0].readTimeout, 8000);
+  }
   const before = await page.evaluate(() => nativeTest.reads);
   await page.evaluate(() => nativeTest.activeState(false));
   assert.equal(await page.locator('#location-map').isVisible(), false);

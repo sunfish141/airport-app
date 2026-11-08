@@ -31,11 +31,22 @@ test('golden packet matches firmware bytes including little endian sequence', ()
 
 test('invalid status packets are rejected instead of displaying invented state', () => {
   const packet = Uint8Array.from([1, 0, 0, 2, 0, 0, 1, 0, 0, 0, 45, 0]);
-  for (const [index, value] of [[0, 2], [1, 5], [2, 99], [3, 8], [3, 0], [3, 3], [5, 255], [10, 88], [11, 1]]) {
+  for (const [index, value] of [[0, 2], [1, 5], [2, 99], [3, 8], [3, 0], [3, 3], [5, 255], [10, 88], [11, 2]]) {
     const invalid = packet.slice(); invalid[index] = value;
     assert.throws(() => decodeStatus(invalid));
   }
   assert.throws(() => decodeStatus(packet.slice(1)));
+});
+
+test('timed demo status explicitly allows unconfirmed position, but still checks ownership', () => {
+  const packet = Uint8Array.from([1, 2, 0, 1, 0, 0, 1, 0, 0, 0, 76, 1]);
+  assert.deepEqual(decodeStatus(packet), {
+    state: 'LOCKED_ASSIGNED', error: 'NONE', assigned: true, open: false, closed: false,
+    setupMs: 0, sequence: 1, command: 'L', timedDemo: true,
+  });
+  packet[11] = 0; assert.throws(() => decodeStatus(packet));
+  packet[11] = 1; packet[3] = 0; assert.throws(() => decodeStatus(packet));
+  packet[1] = 0; packet[3] = 1; assert.throws(() => decodeStatus(packet));
 });
 
 test('revision ordering handles duplicates, stale reads, and uint32 wrap', () => {
